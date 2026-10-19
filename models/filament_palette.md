@@ -26,3 +26,5 @@ To avoid glow filament discoloration from dark black and dark blue pigments, set
 | **Yellow (5)** | 140 | 160 | 190 | 220 | - |
 
 - **Flushing Options**: Enable *Flush into objects' infill* and *Flush into objects' support* to minimize purge tower waste.
+
+<!-- Slicer Note: AMS purge volumes tuned on Bambu Studio 1.8+ -->
