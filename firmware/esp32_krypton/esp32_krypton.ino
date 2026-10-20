@@ -1,17 +1,23 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <WebSocketsServer.h>
 #include <Wire.h>
 #include "config.h"
+#include "gestures.h"
+#include "web_dashboard.h"
 
 WebServer server(HTTP_SERVER_PORT);
+WebSocketsServer webSocket(WS_SERVER_PORT);
 
 void handleRoot() {
-    server.send(200, "text/plain", "Krypton WebServer Online");
+    server.send_P(200, "text/html", INDEX_HTML);
 }
 
-void handleStatus() {
-    server.send(200, "application/json", "{\"status\":\"ready\"}");
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+    if (type == WStype_TEXT) {
+        Serial.printf("[WS] Received: %s\n", payload);
+    }
 }
 
 void setup() {
@@ -20,15 +26,15 @@ void setup() {
 
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_SSID, AP_PASSWORD);
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
 
     server.on("/", HTTP_GET, handleRoot);
-    server.on("/api/status", HTTP_GET, handleStatus);
     server.begin();
-    Serial.println("HTTP server started.");
+
+    webSocket.begin();
+    webSocket.onEvent(webSocketEvent);
 }
 
 void loop() {
     server.handleClient();
+    webSocket.loop();
 }
