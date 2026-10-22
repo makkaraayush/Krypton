@@ -13,11 +13,18 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo Checking dependencies...
-python -c "import cv2, mediapipe, serial" >nul 2>&1
+echo Checking pip availability...
+python -m pip --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Installing required packages from requirements.txt...
-    pip install -r "%~dp0requirements.txt"
+    echo [INFO] pip module not detected. Bootstrapping with ensurepip...
+    python -m ensurepip --default-pip
+)
+
+echo Checking dependencies (OpenCV, MediaPipe, NumPy, PySerial)...
+python -c "import cv2, mediapipe as mp, serial, numpy, requests; assert hasattr(mp, 'solutions')" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Installing or repairing required packages from requirements.txt...
+    python -m pip install --user -r "%~dp0requirements.txt"
 )
 
 echo.
