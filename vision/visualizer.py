@@ -73,13 +73,14 @@ class CyberHud:
             cv2.putText(frame, f"{int(ang)}", (bx, y_base - max_bar_h - 6),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.35, COLOR_CYAN, 1, cv2.LINE_AA)
 
-    def draw_status_bar(self, frame, fps, status_msg, mode):
+    def draw_status_bar(self, frame, fps, status_msg, mode, notification=""):
         """Renders top header badge with mode, FPS, and connection details."""
         h, w, _ = frame.shape
         
         # Top-left info box
-        cv2.rectangle(frame, (20, 20), (320, 75), COLOR_DARK, -1)
-        cv2.rectangle(frame, (20, 20), (320, 75), (50, 60, 75), 1)
+        box_h = 95 if notification else 75
+        cv2.rectangle(frame, (20, 20), (340, 20 + box_h), COLOR_DARK, -1)
+        cv2.rectangle(frame, (20, 20), (340, 20 + box_h), (50, 60, 75), 1)
 
         cv2.putText(frame, "KRYPTON // VISION LINK", (32, 42),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_CYAN, 1, cv2.LINE_AA)
@@ -89,10 +90,15 @@ class CyberHud:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_TEXT, 1, cv2.LINE_AA)
 
         # FPS badge
-        cv2.putText(frame, f"{int(fps)} FPS", (270, 42),
+        cv2.putText(frame, f"{int(fps)} FPS", (280, 42),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_SUCCESS, 1, cv2.LINE_AA)
 
+        # Notification banner (e.g. tare confirmation)
+        if notification:
+            cv2.putText(frame, f">> {notification}", (32, 85),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_AMBER, 1, cv2.LINE_AA)
+
         # Footer hotkeys guide
-        guide = "[Q] Quit  |  [M] Toggle Mode (UDP/COM)  |  [C] Reset Zero"
+        guide = "[Q] Quit  |  [M] Toggle Mode  |  [C] Zero Tare (Rest)  |  [R] Reset"
         cv2.putText(frame, guide, (20, h - 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 190, 200), 1, cv2.LINE_AA)
