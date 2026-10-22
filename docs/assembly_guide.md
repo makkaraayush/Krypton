@@ -30,9 +30,11 @@ This guide covers the assembly of the Krypton bionic arm from freshly printed pl
 
 ## Step 3: Forearm Chassis & Servo Installation
 
-1. Bolt forearm sections `robpart2V4`, `robpart3V4`, `robpart4V4`, and `robpart5V4` together using M3 screws.
-2. Mount the 5x **TowerPro MG996R servos** into their forearm mounting beds using **M3 x 12mm screws**.
-3. Assemble the rotating wrist collar (`WristlargeV4`, `WristsmallV4`, `robcap3V2`) using the M8 x 80mm, 60mm, and 40mm bolts, washers, and M8 Nyloc nuts.
+1. Bolt forearm base section `robpart1V2` to `robpart2V4`, then continue assembling `robpart3V4`, `robpart4V4`, and `robpart5V4` along the forearm spine using M3 socket screws.
+2. Seat the 5x **TowerPro MG996R servos** into `RobServoBedV5.stl`. Fasten each servo with four M3 x 12mm screws and washers so the output shafts alternate sides for compact packaging.
+3. Fasten the `RobCableFrontV3.stl` and `RobCableBackV3.stl` cable routing combs directly over the servo bed. These guide the 5 pairs of braided lines and prevent crossing or snagging before the lines reach the wrist.
+4. Mount the loaded servo bed into the forearm chassis cradle and secure with M3 screws.
+5. Assemble the wrist collar (`WristlargeV4`, `WristsmallV4`, `robcap3V2`) using the M8 bolts, washers, and M8 Nyloc nuts.
 
 ---
 
@@ -54,7 +56,8 @@ This guide covers the assembly of the Krypton bionic arm from freshly printed pl
 2. **Anchor to Pulley**:
    - Thread one end of the line through the hole in the servo winch pulley and tie a triple knot.
 3. **Route Line Through Forearm**:
-   - Pass the line through the wrist spacer sleeve (`Bolt_entretoise7.stl`).
+   - Pass the line through the `RobCableFrontV3` / `RobCableBackV3` channels.
+   - Continue through the wrist spacer sleeve (`Bolt_entretoise7.stl`).
    - Guide the line up into the palmar channel of the corresponding finger.
 4. **Anchor to Fingertip**:
    - Pass the line out of the tip of the finger.
