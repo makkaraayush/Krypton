@@ -45,5 +45,4 @@ Desktop.ini
 # Logs & Captures
 *.log
 captures/
-temp/
-Temp/
+
