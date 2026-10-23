@@ -6,11 +6,11 @@ Rather than redesigning the joint hinges from scratch (which introduces friction
 
 | Spool ID | Color & Type | Role | Assigned STL Files |
 | :---: | :--- | :--- | :--- |
-| **Spool 1** | Solid Black PLA | Internal moving skeleton, outer wrist bearing ring, and recessed screw counterbores | `Index3.stl`, `Majeure3.stl`, `ringfinger3.stl`, `Auriculaire3.stl`, `thumb5.stl`, `WristlargeV4.stl`, `robcap3V2.stl` |
-| **Spool 2** | Dark Grey PLA | Internal forearm chassis spine and inner rotating wrist collar | `robpart2V4.stl`, `robpart3V4.stl`, `robpart4V4.stl`, `robpart5V4.stl`, `WristsmallV4.stl` |
+| **Spool 1** | Solid Black PLA | Internal moving skeleton, outer wrist bearing ring, and tendon collar | `Index3.stl`, `Majeure3.stl`, `ringfinger3.stl`, `Auriculaire3.stl`, `thumb5.stl`, `WristlargeV4.stl`, `cableholderwristV4.stl`, `robcap3V2.stl` |
+| **Spool 2** | Dark Grey PLA | Internal forearm chassis spine, servo frame, and wrist rotation segments | `robpart1V2.stl`, `robpart2V4.stl`, `robpart3V4.stl`, `robpart4V4.stl`, `robpart5V4.stl`, `WristsmallV4.stl`, `RobServoBedV5.stl`, `rotawrist1V3.stl`, `rotawrist2.stl`, `rotawrist3V2.stl` |
 | **Spool 3** | Dark Blue PLA | Primary outer cybernetic armor shells | `coverfinger1.stl` (4x finger caps + 1x dorsal hand plate), `topsurfaceUP6.stl` |
 | **Spool 4** | White-to-Blue Glow PLA | Luminescent energy strips, forearm conduits, custom debossed text | Embedded modifiers on `coverfinger1.stl`, custom text & grooves on `topsurfaceUP6.stl` |
-| **Spool 5** | Yellow PLA | Industrial machinery accents, pulleys, spacer sleeves, electronics brackets | `ardiuinosupport.stl`, `Bolt_entretoise7.stl`, 5x `ServoPulleyHitecV5_tighter.stl`, knuckle side bosses |
+| **Spool 5** | Yellow PLA | Industrial machinery accents, winches, cable combs, wrist gears, brackets | `ardiuinosupport.stl`, `Bolt_entretoise7.stl`, `RobCableFrontV3.stl`, `RobCableBackV3.stl`, `WristGearsV4.stl`, 5x `ServoPulleyHitecV5_tighter.stl` |
 
 ---
 
