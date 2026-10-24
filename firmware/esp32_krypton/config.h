@@ -24,10 +24,14 @@
 
 #define NUM_SERVOS          5
 
-// Pulse Width Calibration (12-bit timer: 0 to 4095 ticks)
-// For 50Hz: 1 cycle = 20,000 microseconds (20ms)
+// Pulse Width Calibration (12-bit timer: 0 to 4095 ticks at 50Hz / 20ms period)
 // 102 ticks ~= 500 us (0 degrees)
 // 512 ticks ~= 2500 us (180 degrees)
+// Per-finger pulse trims allow fine mechanical zero calibration without re-seating servo horns:
+const uint16_t SERVO_PULSE_MIN_MAP[NUM_SERVOS] = { 102, 105, 102, 104, 106 }; // Thumb, Index, Middle, Ring, Pinky
+const uint16_t SERVO_PULSE_MAX_MAP[NUM_SERVOS] = { 510, 512, 512, 508, 505 };
+
+// Legacy single-value fallback constants
 #define SERVO_PULSE_MIN     102
 #define SERVO_PULSE_MAX     512
 
