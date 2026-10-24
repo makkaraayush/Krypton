@@ -10,14 +10,16 @@ struct GesturePose {
 
 // Hand poses (0 = flat open, 180 = full contracted fist)
 const GesturePose PRESET_POSES[] = {
-    { "OPEN",      {   0,   0,   0,   0,   0 } },
-    { "FIST",      { 180, 180, 180, 180, 180 } },
-    { "POINT",     { 180,   0, 180, 180, 180 } },
-    { "PEACE",     { 180,   0,   0, 180, 180 } },
-    { "THUMBS_UP", {   0, 180, 180, 180, 180 } },
-    { "HORNS",     { 180,   0, 180, 180,   0 } },
-    { "PINCH",     {  90,  90,   0,   0,   0 } },
-    { "OK_SIGN",   {  80,  80,   0,   0,   0 } }
+    { "OPEN",         {   0,   0,   0,   0,   0 } },
+    { "FIST",         { 180, 180, 180, 180, 180 } },
+    { "POINT",        { 180,   0, 180, 180, 180 } },
+    { "PEACE",        { 180,   0,   0, 180, 180 } },
+    { "THUMBS_UP",    {   0, 180, 180, 180, 180 } },
+    { "HORNS",        { 180,   0, 180, 180,   0 } },
+    { "ROCK_ON",      {   0,   0, 180, 180,   0 } },
+    { "THREE_FINGER", {   0,   0,   0, 180, 180 } },
+    { "PINCH",        {  90,  90,   0,   0,   0 } },
+    { "OK_SIGN",      {  80,  80,   0,   0,   0 } }
 };
 
 const int NUM_PRESET_POSES = sizeof(PRESET_POSES) / sizeof(PRESET_POSES[0]);
