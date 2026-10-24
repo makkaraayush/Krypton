@@ -119,12 +119,16 @@ private:
     unsigned long _last_update_ms;
 
     void writeAngleHardware(uint8_t channel, float angle) {
+        if (channel >= NUM_SERVOS) return;
+
         if (SERVO_INVERT[channel]) {
             angle = 180.0f - angle;
         }
 
-        // Map degrees (0-180) to 12-bit PWM ticks (SERVO_PULSE_MIN to SERVO_PULSE_MAX)
-        uint16_t pulse = (uint16_t)map((long)(angle * 10.0f), 0, 1800, SERVO_PULSE_MIN, SERVO_PULSE_MAX);
+        // Map degrees (0-180) to 12-bit PWM ticks using channel-specific calibrated pulse limits
+        uint16_t minPulse = SERVO_PULSE_MIN_MAP[channel];
+        uint16_t maxPulse = SERVO_PULSE_MAX_MAP[channel];
+        uint16_t pulse = (uint16_t)map((long)(angle * 10.0f), 0, 1800, minPulse, maxPulse);
         setPWM(channel, 0, pulse);
     }
 
