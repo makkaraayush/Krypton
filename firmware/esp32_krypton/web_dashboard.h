@@ -108,6 +108,9 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         <button class="btn-yellow" onclick="sendPose('PEACE')">PEACE (V)</button>
         <button class="btn-yellow" onclick="sendPose('THUMBS_UP')">THUMBS UP</button>
         <button class="btn-yellow" onclick="sendPose('HORNS')">HORNS</button>
+        <button class="btn-accent" onclick="sendPose('ROCK_ON')">ROCK ON</button>
+        <button class="btn-yellow" onclick="sendPose('THREE_FINGER')">THREE</button>
+        <button class="btn-accent" onclick="sendPose('PINCH')">PINCH</button>
       </div>
     </div>
 
@@ -124,6 +127,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       <div class="telemetry-row">
         <span>Vision / UDP Telemetry</span>
         <span class="telemetry-val">Port 8888 Active</span>
+      </div>
+      <div class="telemetry-row">
+        <span>Link Latency</span>
+        <span class="telemetry-val" id="linkLatency">&lt; 15 ms</span>
       </div>
     </div>
   </div>
