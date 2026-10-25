@@ -35,6 +35,7 @@ class ArmCommunicator:
         self._ser = None
         self._sock = None
         self._last_send_time = 0.0
+        self._last_reconnect_attempt = 0.0
         self._min_interval = 1.0 / 50.0  # Cap transmission at 50Hz
         self.is_connected = False
         self.status_message = "Init"
@@ -116,11 +117,23 @@ class ArmCommunicator:
             except Exception:
                 pass
 
-        elif self.mode == "serial" and self._ser and self._ser.is_open:
-            try:
-                self._ser.write(payload.encode('ascii'))
-            except Exception:
-                pass
+        elif self.mode == "serial":
+            if not self.is_connected or not self._ser or not self._ser.is_open:
+                if now - self._last_reconnect_attempt > 2.0:
+                    self._last_reconnect_attempt = now
+                    self.setup_connection()
+
+            if self._ser and self._ser.is_open:
+                try:
+                    self._ser.write(payload.encode('ascii'))
+                except Exception:
+                    self.is_connected = False
+                    self.status_message = "Serial Disconnected"
+                    try:
+                        self._ser.close()
+                    except Exception:
+                        pass
+                    self._ser = None
 
     def close(self):
         if self._sock:
