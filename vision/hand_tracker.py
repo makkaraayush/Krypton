@@ -141,7 +141,9 @@ def main():
     parser.add_argument("--cam", type=int, default=0, help="Camera device index")
     parser.add_argument("--mode", type=str, default="udp", choices=["udp", "serial", "none"], help="Telemetry mode")
     parser.add_argument("--ip", type=str, default="192.168.4.1", help="ESP32 IP address for UDP")
+    parser.add_argument("--udp-port", type=int, default=8888, help="UDP telemetry port on ESP32 (default 8888)")
     parser.add_argument("--port", type=str, default=None, help="Serial COM port (e.g. COM3) or empty for auto-detect")
+    parser.add_argument("--alpha", type=float, default=0.35, help="EMA motion smoothing factor 0.05-0.95 (default 0.35)")
     parser.add_argument("--mirror", action="store_true", default=True, help="Mirror camera view")
     args = parser.parse_args()
 
@@ -149,6 +151,9 @@ def main():
     print("      KRYPTON REAL-TIME VISION TELEOPERATION      ")
     print("==================================================")
     print(f"[*] Telemetry Mode : {args.mode.upper()}")
+    if args.mode == "udp":
+        print(f"[*] UDP Target     : {args.ip}:{args.udp_port}")
+    print(f"[*] Filter Alpha   : {args.alpha}")
     print(f"[*] Camera Index   : {args.cam}")
     print(f"[*] Mirror Display : {args.mirror}")
     print("--------------------------------------------------")
@@ -171,14 +176,14 @@ def main():
     mp_draw = mp.solutions.drawing_utils
     mp_draw_styles = mp.solutions.drawing_styles
 
-    comm = ArmCommunicator(mode=args.mode, ip=args.ip, serial_port=args.port)
+    comm = ArmCommunicator(mode=args.mode, ip=args.ip, udp_port=args.udp_port, serial_port=args.port)
     hud = CyberHud()
 
     # Low-pass filter state
     smoothed_angles = [0.0, 0.0, 0.0, 0.0, 0.0]
     raw_flexions = [0.0, 0.0, 0.0, 0.0, 0.0]
     zero_offsets = [0.0, 0.0, 0.0, 0.0, 0.0]
-    alpha = 0.35  # Smoothing factor (higher = more responsive, lower = smoother)
+    alpha = max(0.05, min(args.alpha, 0.95))
 
     notification_text = ""
     notification_until = 0.0
