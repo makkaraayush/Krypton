@@ -42,15 +42,15 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     and maps to servo degrees (0 to 180).
     """
     wrist = landmarks[0]
+    index_mcp = landmarks[5]
     middle_mcp = landmarks[9]
 
-    # Hand scale normalization factor (wrist to middle MCP distance in 3D)
-    palm_span = np.linalg.norm([
-        wrist.x - middle_mcp.x, 
-        wrist.y - middle_mcp.y, 
-        wrist.z - middle_mcp.z
-    ])
-    if palm_span == 0:
+    # Hand scale normalization factor (stable multi-knuckle baseline)
+    # Combining wrist-to-middle and wrist-to-index MCP reduces perspective foreshortening
+    dist_wm = np.linalg.norm([wrist.x - middle_mcp.x, wrist.y - middle_mcp.y, wrist.z - middle_mcp.z])
+    dist_wi = np.linalg.norm([wrist.x - index_mcp.x, wrist.y - index_mcp.y, wrist.z - index_mcp.z])
+    palm_span = 0.5 * (dist_wm + dist_wi)
+    if palm_span < 0.05:
         palm_span = 0.2
 
     flexions = []
