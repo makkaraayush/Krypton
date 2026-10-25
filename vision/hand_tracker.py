@@ -187,6 +187,7 @@ def main():
 
     notification_text = ""
     notification_until = 0.0
+    show_help = False
 
     prev_time = time.time()
     fps = 30.0
@@ -253,6 +254,9 @@ def main():
             hud.draw_telemetry_bars(frame, smoothed_angles, calibrated_flexions)
             hud.draw_status_bar(frame, fps, comm.status_message, comm.mode, active_notif)
 
+            if show_help:
+                hud.draw_help_modal(frame)
+
             cv2.imshow("Krypton Bionic Arm - Vision Teleoperation", frame)
 
             key = cv2.waitKey(1) & 0xFF
@@ -272,6 +276,8 @@ def main():
                 notification_text = "CALIBRATION RESET"
                 notification_until = time.time() + 2.0
                 print("[CALIBRATION] Reset zero offsets to factory default.")
+            elif key == ord('h'):
+                show_help = not show_help
 
     finally:
         cap.release()

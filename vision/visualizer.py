@@ -99,6 +99,37 @@ class CyberHud:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_AMBER, 1, cv2.LINE_AA)
 
         # Footer hotkeys guide
-        guide = "[Q] Quit  |  [M] Toggle Mode  |  [C] Zero Tare (Rest)  |  [R] Reset"
+        guide = "[Q] Quit  |  [M] Mode  |  [C] Tare  |  [R] Reset  |  [H] Help"
         cv2.putText(frame, guide, (20, h - 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 190, 200), 1, cv2.LINE_AA)
+
+    def draw_help_modal(self, frame):
+        """Draws cyberpunk keybinding quick-reference modal."""
+        h, w, _ = frame.shape
+        cx, cy = w // 2, h // 2
+        mw, mh = 440, 230
+        x1, y1 = cx - mw // 2, cy - mh // 2
+        x2, y2 = x1 + mw, y1 + mh
+
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), COLOR_DARK, -1)
+        cv2.addWeighted(overlay, 0.88, frame, 0.12, 0, frame)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_CYAN, 1)
+
+        cv2.putText(frame, "KEYBINDINGS & SHORTCUTS", (x1 + 20, y1 + 35),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_CYAN, 1, cv2.LINE_AA)
+
+        bindings = [
+            ("[Q]", "Quit teleoperation session"),
+            ("[M]", "Cycle transmission: UDP -> Serial -> None"),
+            ("[C]", "Zero-tare calibration (rest position)"),
+            ("[R]", "Reset zero offsets to factory default"),
+            ("[H]", "Toggle this help shortcut window")
+        ]
+
+        for idx, (key, desc) in enumerate(bindings):
+            y_pos = y1 + 75 + (idx * 28)
+            cv2.putText(frame, key, (x1 + 25, y_pos),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_AMBER, 1, cv2.LINE_AA)
+            cv2.putText(frame, desc, (x1 + 80, y_pos),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, COLOR_TEXT, 1, cv2.LINE_AA)
