@@ -75,3 +75,12 @@ This guide details the physical wiring and the critical buck converter calibrati
 | `2` | Middle | MCP / PIP / DIP Flexion | Spool pulls palmar tendon |
 | `3` | Ring | MCP / PIP / DIP Flexion | Spool pulls palmar tendon |
 | `4` | Pinky | MCP / PIP / DIP Flexion | Spool pulls palmar tendon |
+
+---
+
+## Wire Harness & Servo Lead Strain Relief
+
+1. **Lead Bundling**: Group the 3-wire servo leads (Brown/GND, Red/V+, Orange/PWM) along the underside channel of `RobServoBedV5.stl`.
+2. **Channel Clearance**: Keep all wires away from the rotating winch spool paths. The 110 lb braided lines move rapidly and will wear down exposed insulation if permitted to rub.
+3. **Chassis Anchor**: Secure the main 5-servo harness to the tie-off slots on `robpart1V2` using 2.5mm nylon zip-ties. This prevents mechanical stress from transferring to the PCA9685 header pins when the arm moves.
+4. **Capacitor Buffer**: For heavy continuous grasping loads, solder a 1000uF 16V low-ESR electrolytic capacitor across the PCA9685 screw terminals (`V+` and `GND`) to absorb instantaneous inductive switching spikes.
