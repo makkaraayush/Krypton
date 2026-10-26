@@ -4,8 +4,8 @@ This directory covers everything related to physical hardware, electronic compon
 
 ## Hardware Guides
 
-- [bom.md](bom.md): Full mechanical and electronic bill of materials. Explains the Option B optimization that replaced expensive dowel pins with M3 x 20mm black-oxide socket screws and Nyloc nuts.
-- [wiring.md](wiring.md): Complete wiring schematic, pinouts, and the mandatory buck converter pre-power voltage calibration guide.
+- [bom.md](bom.md): Full mechanical and electronic bill of materials. Details fastener counts for the complete forearm spine (`robpart1V2` through `robpart5V4`), `RobServoBedV5`, and M3x20 knuckle axles.
+- [wiring.md](wiring.md): Complete electrical schematic, pinouts, buck converter calibration, and wire harness strain relief guidelines.
 - [power_guide.md](power_guide.md): Details on 3S Li-ion battery discharge rates, stall current calculations (up to 12.5A peak), and why standard buck converters fail.
 
 ## Core Component Summary
