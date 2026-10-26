@@ -115,6 +115,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 // UDP Telemetry Listener (From Vision Script)
 // ==========================================
 // Expected packet: "T:45,I:90,M:120,R:120,P:120"
+unsigned long lastUDPPacketTime = 0;
+bool udpStreamingActive = false;
+#define UDP_TIMEOUT_MS 3000
+
 void handleUDPTelemetry() {
     int packetSize = udpServer.parsePacket();
     if (packetSize) {
@@ -122,6 +126,8 @@ void handleUDPTelemetry() {
         if (len > 0) {
             udpPacketBuffer[len] = '\0';
             String msg = String(udpPacketBuffer);
+            lastUDPPacketTime = millis();
+            udpStreamingActive = true;
             
             float angles[5] = { -1, -1, -1, -1, -1 };
             // Parse comma-delimited key:value pairs
@@ -145,6 +151,9 @@ void handleUDPTelemetry() {
                 }
             }
         }
+    } else if (udpStreamingActive && (millis() - lastUDPPacketTime > UDP_TIMEOUT_MS)) {
+        udpStreamingActive = false;
+        Serial.println("[WATCHDOG] UDP telemetry stream idle > 3s. Holding current position.");
     }
 }
 
