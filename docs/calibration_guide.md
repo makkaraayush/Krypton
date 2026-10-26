@@ -14,17 +14,30 @@ Always verify voltages with a multimeter before powering electronics:
 
 ---
 
-## 2. Software Pulse Limits (PCA9685)
+## 2. Software Pulse Limits & Per-Finger Trims
 
 In `firmware/esp32_krypton/config.h`:
 ```cpp
-#define SERVO_PULSE_MIN     102  // ~500 us (0 degrees)
-#define SERVO_PULSE_MAX     512  // ~2500 us (180 degrees)
+// Per-finger pulse trims (12-bit PCA9685 ticks, 0 to 4095 @ 50Hz)
+const uint16_t SERVO_PULSE_MIN_MAP[NUM_SERVOS] = { 102, 105, 102, 104, 106 }; // Thumb, Index, Middle, Ring, Pinky
+const uint16_t SERVO_PULSE_MAX_MAP[NUM_SERVOS] = { 510, 512, 512, 508, 505 };
 ```
 
-Different brands of MG996R servos have slight variations in internal potentiometer range. If your servo hits its internal mechanical stop before reaching 180 degrees:
-- Increase `SERVO_PULSE_MIN` from `102` to `115`.
-- Decrease `SERVO_PULSE_MAX` from `512` to `495`.
+Different production batches of TowerPro MG996R servos have slight internal potentiometer variations. Rather than un-screwing the winch spool and jumping teeth on the 25T spline, you can fine-tune mechanical end-stops in firmware:
+
+1. **Test Channel Centering**:
+   Run the CLI test tool to command a single finger to 0 degrees:
+   ```bash
+   python tools/servo_test.py --mode udp --channel 1 --angle 0
+   ```
+2. **Listen for Potentiometer Jitter**:
+   If the servo motor buzzes or hums at 0 degrees, it is being mechanically forced against its internal physical stop. Increase `SERVO_PULSE_MIN_MAP` for that channel by 3 to 5 ticks (e.g. from `102` to `106`).
+3. **Verify Full Contraction**:
+   Command the finger to 180 degrees:
+   ```bash
+   python tools/servo_test.py --mode udp --channel 1 --angle 180
+   ```
+   If the finger stops short of a complete fist, increase `SERVO_PULSE_MAX_MAP` slightly until full grip closure is achieved.
 
 ---
 
