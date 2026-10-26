@@ -50,23 +50,25 @@ The mechanical joint foundation is inspired by the open-source InMoov robot arm,
 
 - [hardware/](hardware/README.md)
   - [bom.md](hardware/bom.md): Complete mechanical, fastener, and electronics bill of materials with cost optimizations.
-  - [wiring.md](hardware/wiring.md): Electrical schematic, buck converter calibration guide, and pinout tables.
+  - [wiring.md](hardware/wiring.md): Electrical schematic, buck converter calibration guide, wire harness routing, and pinout tables.
   - [power_guide.md](hardware/power_guide.md): 3S battery sizing, stall current spikes, and voltage safety.
 - [models/](models/README.md)
   - [filament_palette.md](models/filament_palette.md): 5-spool cyberpunk colorway, assigned STLs, and AMS purge volumes.
-  - [plates_and_slicing.md](models/plates_and_slicing.md): 4-plate zero-waste consolidation plan, Gyroid infill, and modifier setups.
-  - [stl/](models/stl/): Organized 3D print assets for fingers, chassis, wrist, armor, and winches.
-  - [3mf/](models/3mf/): Sliced Bambu Studio project file.
+  - [plates_and_slicing.md](models/plates_and_slicing.md): Multi-plate zero-waste consolidation plan, Gyroid infill, and modifier setups.
+  - [stl/](models/stl/): Organized 3D print assets for fingers, forearm spine (`robpart1V2` to `robpart5V4`), wrist rotation mechanism, servo drive bed, and cyber armor.
+  - [3mf/](models/3mf/): Sliced Bambu Studio project files for plate consolidation and single-finger orientation.
 - [firmware/](firmware/README.md)
-  - [esp32_krypton/](firmware/esp32_krypton/): Arduino/PlatformIO source code, web dashboard, gesture definitions, and trajectory smoothing.
+  - [esp32_krypton/](firmware/esp32_krypton/): Arduino/PlatformIO source code, web dashboard, gesture definitions, watchdog failsafe, and trajectory smoothing.
 - [vision/](vision/README.md)
-  - [hand_tracker.py](vision/hand_tracker.py): Real-time MediaPipe right-hand tracking loop.
-  - [communicator.py](vision/communicator.py): Multi-mode transmission handler (Serial, UDP, HTTP).
-  - [visualizer.py](vision/visualizer.py): Cyberpunk HUD overlay with live tension progress bars.
+  - [hand_tracker.py](vision/hand_tracker.py): Real-time MediaPipe right-hand tracking loop with multi-knuckle scale normalization.
+  - [communicator.py](vision/communicator.py): Multi-mode transmission handler (Serial with auto-reconnect, Wi-Fi UDP).
+  - [visualizer.py](vision/visualizer.py): Cyberpunk HUD overlay with live tension progress bars and keybinding help modal.
+- [tools/](tools/)
+  - [servo_test.py](tools/servo_test.py): Standalone CLI utility for sweeping and testing individual servo channels over Serial or UDP.
 - [docs/](docs/README.md)
-  - [assembly_guide.md](docs/assembly_guide.md): Step-by-step mechanical assembly, hole reaming, and tendon stringing.
-  - [calibration_guide.md](docs/calibration_guide.md): Electrical zeroing, servo limits, and tension tuning.
-  - [troubleshooting.md](docs/troubleshooting.md): Common failure modes, jitter fixes, and brownout solutions.
+  - [assembly_guide.md](docs/assembly_guide.md): Step-by-step mechanical assembly, hole reaming, servo bed installation, and tendon stringing.
+  - [calibration_guide.md](docs/calibration_guide.md): Electrical zeroing, per-finger pulse trimming, and tension tuning.
+  - [troubleshooting.md](docs/troubleshooting.md): Common failure modes, knot slippage prevention, jitter fixes, and brownout solutions.
 
 ---
 
