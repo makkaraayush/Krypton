@@ -17,6 +17,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <esp_arduino_version.h>
 
 // ==========================================
 // Hardware Configuration
@@ -123,12 +124,26 @@ void writeAngleHardware(uint8_t channel, float angle) {
     setPWM(channel, 0, pulse);
 }
 
+void initDirectGPIOServo() {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+    ledcAttach(DIRECT_GPIO_PIN, 50, 14); // Core 3.0+: 50Hz, 14-bit
+#else
+    ledcSetup(0, 50, 14);                // Core 2.x: Channel 0, 50Hz, 14-bit
+    ledcAttachPin(DIRECT_GPIO_PIN, 0);
+#endif
+    directModeEnabled = true;
+}
+
 void setDirectGPIOServo(float angle) {
     angle = constrain(angle, 0.0f, 180.0f);
     // 50Hz = 20ms period. 0 deg ~= 500us (2.5% duty), 180 deg ~= 2500us (12.5% duty)
     // 14-bit timer (0-16383): 500us = 410, 2500us = 2048
     uint32_t duty = map((long)(angle * 10.0f), 0, 1800, 410, 2048);
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+    ledcWrite(DIRECT_GPIO_PIN, duty);
+#else
     ledcWrite(0, duty);
+#endif
 }
 
 // ==========================================
@@ -317,9 +332,7 @@ void processCommand(String cmd) {
     } else if (cmd.startsWith("gpio ") || cmd.startsWith("GPIO ")) {
         float ang = cmd.substring(5).toFloat();
         if (!directModeEnabled) {
-            ledcSetup(0, 50, 14); // 50Hz, 14-bit resolution
-            ledcAttachPin(DIRECT_GPIO_PIN, 0);
-            directModeEnabled = true;
+            initDirectGPIOServo();
             Serial.printf("[*] Initialized direct ESP32 GPIO %d PWM.\n", DIRECT_GPIO_PIN);
         }
         setDirectGPIOServo(ang);
