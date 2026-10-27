@@ -20,27 +20,37 @@ This guide details the physical wiring and the critical buck converter calibrati
 
 ## System Connection Diagram
 
+You can power the ESP32 using the `V+` pin on the PCA9685's left 6-pin header. This is the cleanest possible wiring setup because the entire connection between the ESP32 and PCA9685 is just a single 5-wire Dupont ribbon cable.
+
+### 5-Wire Header Wiring (Cleanest & Recommended)
+
 ```
-[ 12V Battery (11.1V - 12.6V) ]
-       │
-       ├──(+)──> [IN+] SZBK07 300W 20A Buck [OUT+ (6.0V)] ──┬──> [PCA9685 Green Terminal V+]
-       │                                                    └──> [ESP32 VIN Pin]
-       └──(–)──> [IN-] SZBK07 300W 20A Buck [OUT- (GND)]  ──┬──> [PCA9685 Green Terminal GND]
-                                                             └──> [ESP32 GND Pin]
+[ 12V Battery ]
+      │
+      ├──(+)──> [IN+] SZBK07 300W 20A Buck [OUT+ (6.0V)] ──> [PCA9685 Green Screw V+]
+      └──(–)──> [IN-] SZBK07 300W 20A Buck [OUT- (GND)]  ──> [PCA9685 Green Screw GND]
 
-[ ESP32 38-Pin ]                       [ PCA9685 Logic Header ]
-  ├── 3.3V Pin ──────────────────────> VCC (Logic Power)
-  ├── GND Pin  ──────────────────────> GND (Logic Ground)
-  ├── GPIO 21 (SDA) ─────────────────> SDA (I2C Data)
-  └── GPIO 22 (SCL) ─────────────────> SCL (I2C Clock)
+[ PCA9685 Left 6-Pin Header ]                   [ ESP32 38-Pin ]
+  ├── V+  (6.0V Motor Rail) ───────────────────> VIN Pin  (Powers ESP32 onboard LDO)
+  ├── GND (Common Ground)   ───────────────────> GND Pin
+  ├── VCC (3.3V Logic Rail) <─────────────────── 3.3V Pin (Powers PCA9685 chip)
+  ├── SDA (I2C Data)        <─────────────────── GPIO 21
+  ├── SCL (I2C Clock)       <─────────────────── GPIO 22
+  └── OE  (Output Enable)   (Leave Disconnected)
 
-[ PCA9685 Servo Headers (Channels 0 to 4) ]
+[ PCA9685 3-Pin Servo Headers (Channels 0 to 4) ]
   ├── Channel 0 ──> Thumb MG996R Servo
   ├── Channel 1 ──> Index MG996R Servo
   ├── Channel 2 ──> Middle (Majeure) MG996R Servo
   ├── Channel 3 ──> Ring MG996R Servo
   └── Channel 4 ──> Pinky (Auriculaire) MG996R Servo
 ```
+
+> **CRITICAL PIN CAUTION**:
+> - **`V+`** is **6.0V**: Must connect to ESP32 **`VIN`**. (ESP32 steps 6V down to 3.3V internally).
+> - **`VCC`** is **3.3V**: Must connect to ESP32 **`3.3V`**. (Powers PCA9685 digital logic).
+> - **DO NOT SWAP THEM**: Never connect the 6.0V `V+` pin to ESP32 `3.3V`, or you will destroy the ESP32 chip.
+> - **Capacitor**: Add a **1000uF 16V capacitor** to the PCA9685 capacitor footprint (`C1`) next to the green terminal. This cushions transient voltage dips when all 5 servos pull peak current, preventing ESP32 brownouts.
 
 ---
 

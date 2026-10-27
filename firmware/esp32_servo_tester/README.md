@@ -43,16 +43,16 @@ Follow these 4 calibration steps before plugging anything into the converter out
 ```
 [ 12V Battery ]
       │
-      ├──(+)──> [IN+]  SZBK07 300W 20A Buck  [OUT+ (6.0V)] ──┬──> [PCA9685 V+ Green Terminal]
-      │                                                       └──> [ESP32 VIN Pin]
-      └──(–)──> [IN-]  SZBK07 300W 20A Buck  [OUT- (GND)]  ──┬──> [PCA9685 GND Green Terminal]
-                                                              └──> [ESP32 GND Pin]
+      ├──(+)──> [IN+] SZBK07 300W 20A Buck [OUT+ (6.0V)] ──> [PCA9685 Green Screw V+]
+      └──(–)──> [IN-] SZBK07 300W 20A Buck [OUT- (GND)]  ──> [PCA9685 Green Screw GND]
 
-[ ESP32 ]                                    [ PCA9685 Logic Header (6-Pin Side) ]
-  ├── 3.3V Pin ────────────────────────────> VCC (Logic Power: 3.3V ONLY)
-  ├── GND Pin  ────────────────────────────> GND (Logic Ground)
-  ├── GPIO 21 (SDA) ───────────────────────> SDA (I2C Data)
-  └── GPIO 22 (SCL) ───────────────────────> SCL (I2C Clock)
+[ PCA9685 Left 6-Pin Header ]                   [ ESP32 ]
+  ├── V+  (6.0V Motor Rail) ───────────────────> VIN Pin  (Powers ESP32 onboard LDO)
+  ├── GND (Common Ground)   ───────────────────> GND Pin
+  ├── VCC (3.3V Logic Rail) <─────────────────── 3.3V Pin (Powers PCA9685 chip)
+  ├── SDA (I2C Data)        <─────────────────── GPIO 21
+  ├── SCL (I2C Clock)       <─────────────────── GPIO 22
+  └── OE  (Output Enable)   (Leave Disconnected)
 
 [ PCA9685 3-Pin Servo Headers (Channels 0 to 4) ]
   ├── Channel 0 ──> Thumb MG996R Servo
@@ -62,18 +62,20 @@ Follow these 4 calibration steps before plugging anything into the converter out
   └── Channel 4 ──> Pinky (Auriculaire) MG996R Servo
 ```
 
+> **Clean Wiring Tip**: The `V+` pin on the PCA9685's left 6-pin header is directly tied to the 6.0V motor rail from the green screw terminal! You can run a single 5-wire female-to-female Dupont ribbon cable between the PCA9685 left header and your ESP32. You do not need any messy split wires coming out of the buck converter.
+
 ---
 
 ## 4. Connection Pinout Tables
 
-### A. Power Connections (From Calibrated SZBK07 Buck)
+### A. Power Connections
 
-| SZBK07 Terminal | Target Destination | Wire Gauge | Notes |
+| Source Point | Target Destination | Wire Type | Purpose |
 | :--- | :--- | :--- | :--- |
-| `OUT+ (6.0V)` | `PCA9685 V+` (Green screw terminal) | 18 AWG / 20 AWG | High-current servo motor power rail |
-| `OUT+ (6.0V)` | `ESP32 VIN` pin | 22 AWG / Dupont | ESP32 onboard LDO drops 6.0V to 3.3V cleanly |
-| `OUT- (GND)` | `PCA9685 GND` (Green screw terminal) | 18 AWG / 20 AWG | High-current ground return |
-| `OUT- (GND)` | `ESP32 GND` pin | 22 AWG / Dupont | Common reference ground |
+| `SZBK07 OUT+ (6.0V)` | `PCA9685 V+` (Green screw terminal) | 18/20 AWG Silicone | Main servo power feed |
+| `PCA9685 Green V+` | `ESP32 VIN` pin | 22/24 AWG Dupont | Powers ESP32 onboard 3.3V LDO regulator |
+| `SZBK07 OUT- (GND)` | `PCA9685 GND` (Green screw terminal) | 18/20 AWG Silicone | Main ground return |
+| `PCA9685 Green GND` | `ESP32 GND` pin | 22/24 AWG Dupont | Common ground reference |
 
 ### B. Logic Connections (ESP32 to PCA9685)
 
