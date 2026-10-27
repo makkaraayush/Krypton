@@ -30,8 +30,8 @@ You can power the ESP32 using the `V+` pin on the PCA9685's left 6-pin header. T
       ├──(+)──> [IN+] SZBK07 300W 20A Buck [OUT+ (6.0V)] ──> [PCA9685 Green Screw V+]
       └──(–)──> [IN-] SZBK07 300W 20A Buck [OUT- (GND)]  ──> [PCA9685 Green Screw GND]
 
-[ PCA9685 Left 6-Pin Header ]                   [ ESP32 38-Pin ]
-  ├── V+  (6.0V Motor Rail) ───────────────────> VIN Pin  (Powers ESP32 onboard LDO)
+[ PCA9685 Left 6-Pin Header ]                   [ ESP32 38-Pin / Type-C ]
+  ├── V+  (6.0V Motor Rail) ───────────────────> VIN / 5V Pin  (Powers ESP32 onboard LDO)
   ├── GND (Common Ground)   ───────────────────> GND Pin
   ├── VCC (3.3V Logic Rail) <─────────────────── 3.3V Pin (Powers PCA9685 chip)
   ├── SDA (I2C Data)        <─────────────────── GPIO 21
@@ -47,7 +47,7 @@ You can power the ESP32 using the `V+` pin on the PCA9685's left 6-pin header. T
 ```
 
 > **CRITICAL PIN CAUTION**:
-> - **`V+`** is **6.0V**: Must connect to ESP32 **`VIN`**. (ESP32 steps 6V down to 3.3V internally).
+> - **`V+`** is **6.0V**: Must connect to ESP32 **`VIN` (labeled `5V` or `V5` on USB Type-C boards)**. This pin feeds the onboard low-dropout regulator (LDO) which drops the 6.0V down to 3.3V for the ESP32 chip.
 > - **`VCC`** is **3.3V**: Must connect to ESP32 **`3.3V`**. (Powers PCA9685 digital logic).
 > - **DO NOT SWAP THEM**: Never connect the 6.0V `V+` pin to ESP32 `3.3V`, or you will destroy the ESP32 chip.
 > - **Capacitor**: Add a **1000uF 16V capacitor** to the PCA9685 capacitor footprint (`C1`) next to the green terminal. This cushions transient voltage dips when all 5 servos pull peak current, preventing ESP32 brownouts.

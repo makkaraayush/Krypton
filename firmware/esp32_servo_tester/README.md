@@ -46,8 +46,8 @@ Follow these 4 calibration steps before plugging anything into the converter out
       ├──(+)──> [IN+] SZBK07 300W 20A Buck [OUT+ (6.0V)] ──> [PCA9685 Green Screw V+]
       └──(–)──> [IN-] SZBK07 300W 20A Buck [OUT- (GND)]  ──> [PCA9685 Green Screw GND]
 
-[ PCA9685 Left 6-Pin Header ]                   [ ESP32 ]
-  ├── V+  (6.0V Motor Rail) ───────────────────> VIN Pin  (Powers ESP32 onboard LDO)
+[ PCA9685 Left 6-Pin Header ]                   [ ESP32 (Type-C / DevKit) ]
+  ├── V+  (6.0V Motor Rail) ───────────────────> 5V / VIN Pin  (Powers ESP32 onboard 3.3V LDO)
   ├── GND (Common Ground)   ───────────────────> GND Pin
   ├── VCC (3.3V Logic Rail) <─────────────────── 3.3V Pin (Powers PCA9685 chip)
   ├── SDA (I2C Data)        <─────────────────── GPIO 21
@@ -62,7 +62,9 @@ Follow these 4 calibration steps before plugging anything into the converter out
   └── Channel 4 ──> Pinky (Auriculaire) MG996R Servo
 ```
 
-> **Clean Wiring Tip**: The `V+` pin on the PCA9685's left 6-pin header is directly tied to the 6.0V motor rail from the green screw terminal! You can run a single 5-wire female-to-female Dupont ribbon cable between the PCA9685 left header and your ESP32. You do not need any messy split wires coming out of the buck converter.
+> **Clean Wiring Tip**: The `V+` pin on the PCA9685's left 6-pin header is directly tied to the 6.0V motor rail from the green screw terminal! You can run a single 5-wire female-to-female Dupont ribbon cable between the PCA9685 left header and your ESP32.
+> 
+> *Note on the ESP32 `5V` pin*: On USB Type-C ESP32 development boards, the external power input pin is typically labeled **`5V`**, **`V5`**, or **`5V0`** rather than `VIN`. They are electrically the exact same pin—both route directly to the onboard LDO voltage regulator, which converts 5.0V–6.0V down to a stable 3.3V.
 
 ---
 
@@ -73,9 +75,9 @@ Follow these 4 calibration steps before plugging anything into the converter out
 | Source Point | Target Destination | Wire Type | Purpose |
 | :--- | :--- | :--- | :--- |
 | `SZBK07 OUT+ (6.0V)` | `PCA9685 V+` (Green screw terminal) | 18/20 AWG Silicone | Main servo power feed |
-| `PCA9685 Green V+` | `ESP32 VIN` pin | 22/24 AWG Dupont | Powers ESP32 onboard 3.3V LDO regulator |
+| `PCA9685 Left Header V+` | `ESP32 5V / VIN` pin | 22/24 AWG Dupont | Powers ESP32 onboard 3.3V LDO regulator |
 | `SZBK07 OUT- (GND)` | `PCA9685 GND` (Green screw terminal) | 18/20 AWG Silicone | Main ground return |
-| `PCA9685 Green GND` | `ESP32 GND` pin | 22/24 AWG Dupont | Common ground reference |
+| `PCA9685 Left Header GND` | `ESP32 GND` pin | 22/24 AWG Dupont | Common ground reference |
 
 ### B. Logic Connections (ESP32 to PCA9685)
 
