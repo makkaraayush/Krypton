@@ -2,12 +2,12 @@
 
 This guide details the physical wiring and the critical buck converter calibration procedure.
 
-## Pre-Power Buck Converter Calibration (DO THIS FIRST!)
+## Pre-Power Buck Converter Calibration (SZBK07 / 300W 20A)
 
-> **WARNING**: The 300W 20A buck converter ships from the factory with its trimmer potentiometers in random positions. If you connect it directly to your PCA9685 and ESP32 without calibration, it could output 12V and destroy your servos and boards!
+> **WARNING**: The SZBK07 300W 20A buck converter ships from the factory with its trimmer potentiometers in random positions. If you connect it directly to your PCA9685 and ESP32 without calibration, it could output 12V and destroy your servos and boards!
 
 1. **Disconnect Everything**: Ensure no servos, ESP32, or PCA9685 boards are connected to the buck converter output.
-2. **Connect Battery**: Attach your 3S 18650 battery pack (11.1V - 12.6V) to `IN+` and `IN-` on the buck converter.
+2. **Connect Battery**: Attach your 12V battery (3S 18650 Li-ion 11.1V-12.6V or 12V pack) to `IN+` and `IN-` on the SZBK07 screw terminal blocks.
 3. **Calibrate Voltage (CV)**:
    - Set your digital multimeter to DC Voltage measurement.
    - Place multimeter probes across `OUT+` and `OUT-`.
@@ -21,12 +21,12 @@ This guide details the physical wiring and the critical buck converter calibrati
 ## System Connection Diagram
 
 ```
-[ 3S 18650 Battery (11.1V - 12.6V) ]
+[ 12V Battery (11.1V - 12.6V) ]
        │
-       ├──(+)──> [IN+] 300W 20A Buck Converter [OUT+ (6.0V)] ──┬──> [PCA9685 Green Terminal V+]
-       │                                                       └──> [ESP32 VIN Pin]
-       └──(–)──> [IN-] 300W 20A Buck Converter [OUT- (GND)]  ──┬──> [PCA9685 Green Terminal GND]
-                                                               └──> [ESP32 GND Pin]
+       ├──(+)──> [IN+] SZBK07 300W 20A Buck [OUT+ (6.0V)] ──┬──> [PCA9685 Green Terminal V+]
+       │                                                    └──> [ESP32 VIN Pin]
+       └──(–)──> [IN-] SZBK07 300W 20A Buck [OUT- (GND)]  ──┬──> [PCA9685 Green Terminal GND]
+                                                             └──> [ESP32 GND Pin]
 
 [ ESP32 38-Pin ]                       [ PCA9685 Logic Header ]
   ├── 3.3V Pin ──────────────────────> VCC (Logic Power)

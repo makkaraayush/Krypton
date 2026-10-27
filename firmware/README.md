@@ -2,7 +2,14 @@
 
 The firmware runs on an ESP32 dual-core microcontroller and offloads 50Hz PWM signal generation to a PCA9685 16-channel 12-bit I2C driver.
 
-## Features
+## Firmware Packages
+
+- [esp32_krypton/](esp32_krypton/): Production firmware with async cyberpunk web dashboard, WebSockets, UDP socket receiver, and gesture engine.
+- [esp32_servo_tester/](esp32_servo_tester/): Standalone bench testing and calibration sketch for 12V battery + SZBK07 buck converter + PCA9685. Features interactive serial menu, zeroing mode, single/multi-finger sweep, and live pulse trimming.
+
+---
+
+## Features (Production Firmware)
 
 - **Asynchronous Web Dashboard**: Cyberpunk-themed dark interface served from ESP32 PROGMEM.
 - **WebSocket Channel (Port 81)**: Sub-50ms latency slider controls from smartphones or desktop browsers.

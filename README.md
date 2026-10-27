@@ -58,7 +58,8 @@ The mechanical joint foundation is inspired by the open-source InMoov robot arm,
   - [stl/](models/stl/): Organized 3D print assets for fingers, forearm spine (`robpart1V2` to `robpart5V4`), wrist rotation mechanism, servo drive bed, and cyber armor.
   - [3mf/](models/3mf/): Sliced Bambu Studio project files for plate consolidation and single-finger orientation.
 - [firmware/](firmware/README.md)
-  - [esp32_krypton/](firmware/esp32_krypton/): Arduino/PlatformIO source code, web dashboard, gesture definitions, watchdog failsafe, and trajectory smoothing.
+  - [esp32_krypton/](firmware/esp32_krypton/): Production firmware with async web dashboard, WebSockets, UDP socket receiver, and trajectory smoothing.
+  - [esp32_servo_tester/](firmware/esp32_servo_tester/): Standalone bench testing sketch and wiring guide for 12V battery + SZBK07 buck converter + PCA9685.
 - [vision/](vision/README.md)
   - [hand_tracker.py](vision/hand_tracker.py): Real-time MediaPipe right-hand tracking loop with multi-knuckle scale normalization.
   - [communicator.py](vision/communicator.py): Multi-mode transmission handler (Serial with auto-reconnect, Wi-Fi UDP).
