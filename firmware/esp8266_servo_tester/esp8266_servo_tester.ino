@@ -2,50 +2,42 @@
  * Krypton Bionic Arm - Standalone ESP8266 Servo Test Suite
  * 
  * Purpose:
- * Bench testing, electrical zeroing, tendon tension checking, varied angle testing,
- * and pulse trimming for TowerPro MG996R servos via PCA9685 I2C driver (or direct GPIO).
- * Exact drop-in ESP8266 version of esp32_servo_tester.
+ * Bench testing, electrical zeroing, tendon tension checking, and pulse trimming
+ * for TowerPro MG996R servos via PCA9685 I2C driver (or optional direct GPIO).
  * 
  * Hardware:
  * - ESP8266 (NodeMCU / D1 Mini)
- *   - I2C SDA: Pin D2 (GPIO 4)
- *   - I2C SCL: Pin D1 (GPIO 5)
- *   - Optional Direct Servo: Pin D5 (GPIO 14)
+ *   - SDA: Pin D2 (GPIO 4)
+ *   - SCL: Pin D1 (GPIO 5)
+ *   - Direct GPIO test pin: Pin D5 (GPIO 14)
  * - PCA9685 16-Channel 12-bit PWM Driver (I2C 0x40, 50Hz)
  * - SZBK07 300W 20A Buck Converter (Input: 12V Battery -> Output: 6.0V DC)
  * - 5x TowerPro MG996R Servos (Channels 0 to 4)
  * 
- * Wiring (5-wire ribbon from PCA9685 left header to ESP8266):
- * - PCA9685 V+ (6.0V)  -> ESP8266 VIN / 5V pin (feeds onboard 3.3V LDO regulator)
- * - PCA9685 GND        -> ESP8266 GND pin
- * - PCA9685 VCC (3.3V) <- ESP8266 3V3 pin (powers PCA9685 logic)
- * - PCA9685 SDA        <- ESP8266 D2 (GPIO 4)
- * - PCA9685 SCL        <- ESP8266 D1 (GPIO 5)
+ * Pin Connections:
+ * - ESP8266 D2 (GPIO 4) -> PCA9685 SDA
+ * - ESP8266 D1 (GPIO 5) -> PCA9685 SCL
+ * - ESP8266 3V3         -> PCA9685 VCC (logic power)
+ * - ESP8266 GND         -> PCA9685 GND (common ground)
+ * - ESP8266 VIN / 5V    -> PCA9685 V+ (6.0V from buck converter)
+ * - PCA9685 OE          -> Connect to GND (or leave open if pulled down)
  * 
  * Serial Monitor:
  * Baud Rate: 115200 (set "Newline" or "Both NL & CR" in Arduino IDE)
  */
 
 #include <Arduino.h>
+#include <ESP8266WiFi.h>
 #include <Wire.h>
 #include <Servo.h>
 
 // ==========================================
 // Hardware Configuration
 // ==========================================
-#ifndef D1
-#define D1 5
-#endif
-#ifndef D2
-#define D2 4
-#endif
-#ifndef D5
-#define D5 14
-#endif
-
-#define I2C_SDA_PIN         D2        // GPIO 4
-#define I2C_SCL_PIN         D1        // GPIO 5
-#define I2C_CLOCK_SPEED     400000    // 400kHz Fast Mode
+// Explicit GPIO numbers (D2 = GPIO 4, D1 = GPIO 5 on NodeMCU & D1 Mini)
+#define I2C_SDA_PIN         4         // D2 (GPIO 4)
+#define I2C_SCL_PIN         5         // D1 (GPIO 5)
+#define I2C_CLOCK_SPEED     100000L   // 100kHz Standard Mode (stable for ESP8266 software I2C)
 #define PCA9685_ADDR        0x40      // Default address
 #define PWM_FREQ            50        // 50Hz (20ms cycle for MG996R)
 
@@ -70,7 +62,7 @@ float currentAngles[NUM_SERVOS] = { 0, 0, 0, 0, 0 };
 int activeChannel = 0; // Currently selected finger (0 to 4)
 
 // Optional Single Servo Direct GPIO Test Pin (if testing without PCA9685)
-#define DIRECT_GPIO_PIN     D5        // GPIO 14 on ESP8266
+#define DIRECT_GPIO_PIN     14        // D5 (GPIO 14)
 Servo directServo;
 bool directModeEnabled      = false;
 
@@ -119,18 +111,39 @@ void setPWMFreq(float freq) {
 }
 
 bool initPCA9685() {
+    // 1. Bus recovery: clock SCL 16 times in case any device was left holding SDA low
+    pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+    pinMode(I2C_SCL_PIN, OUTPUT);
+    for (int i = 0; i < 16; i++) {
+        digitalWrite(I2C_SCL_PIN, LOW);
+        delayMicroseconds(5);
+        digitalWrite(I2C_SCL_PIN, HIGH);
+        delayMicroseconds(5);
+    }
+
+    // 2. Initialize I2C bus at stable 100kHz for ESP8266 software I2C
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
     Wire.setClock(I2C_CLOCK_SPEED);
 
-    // Verify presence
+    // 3. Verify presence
     Wire.beginTransmission(PCA9685_ADDR);
     if (Wire.endTransmission() != 0) {
         return false;
     }
 
+    // 4. Reset & wake
     writeRegister(PCA9685_MODE1, 0x00);
     delay(10);
+
+    // 5. CRITICAL FIX: Set MODE2 bit 2 (0x04) to enable TOTEM-POLE (Push-Pull) output drive.
+    // Default 0x00 is open-drain, which CANNOT pull servo signal lines high!
+    writeRegister(PCA9685_MODE2, 0x04);
+    delay(5);
+
+    // 6. Set 50Hz PWM frequency
     setPWMFreq(PWM_FREQ);
+
+    // 7. Auto-increment & restart
     writeRegister(PCA9685_MODE1, 0xA1);
     delay(5);
     return true;
@@ -274,10 +287,7 @@ void printMenu() {
     Serial.println("-------------------------------------------------------");
     Serial.println("  0 - 4       : Select active finger (0:Thumb, 1:Index, 2:Mid, 3:Ring, 4:Pinky)");
     Serial.println("  <angle>     : Move active finger to angle 0-180 (e.g. '0', '90', '180')");
-    Serial.println("  <ch> <ang>  : Move specific channel directly (e.g. '0 45', '1 90', '2 120')");
-    Serial.println("  all <angle> : Move ALL fingers to same angle (e.g. 'all 0', 'all 90')");
-    Serial.println("  T:..,I:..   : Varied angles packet (e.g. 'T:45,I:90,M:120,R:60,P:30')");
-    Serial.println("  <5 angles>  : List of 5 varied angles (e.g. '30 60 90 120 150')");
+    Serial.println("  all <angle> : Move ALL fingers to angle (e.g. 'all 0', 'all 90')");
     Serial.println("  s           : Sweep active finger (0 -> 180 -> 0)");
     Serial.println("  w           : Stress test: sweep ALL 5 fingers together");
     Serial.println("  z           : ZERO ALL fingers to 0 deg (for installing horns)");
@@ -306,27 +316,6 @@ void cyclePose() {
     poseIndex = (poseIndex + 1) % 6;
 }
 
-void parseAnglePacket(const String& line) {
-    int start = 0;
-    while (start < line.length()) {
-        int comma = line.indexOf(',', start);
-        if (comma == -1) comma = line.indexOf(' ', start);
-        if (comma == -1) comma = line.length();
-        String token = line.substring(start, comma);
-        token.trim();
-        token.toUpperCase();
-
-        if (token.startsWith("T:")) writeAngleHardware(0, token.substring(2).toFloat());
-        else if (token.startsWith("I:")) writeAngleHardware(1, token.substring(2).toFloat());
-        else if (token.startsWith("M:")) writeAngleHardware(2, token.substring(2).toFloat());
-        else if (token.startsWith("R:")) writeAngleHardware(3, token.substring(2).toFloat());
-        else if (token.startsWith("P:")) writeAngleHardware(4, token.substring(2).toFloat());
-
-        start = comma + 1;
-        while (start < line.length() && (line[start] == ' ' || line[start] == ',')) start++;
-    }
-}
-
 void processCommand(String cmd) {
     cmd.trim();
     if (cmd.length() == 0) return;
@@ -345,13 +334,9 @@ void processCommand(String cmd) {
         sweepAllSimultaneous();
     } else if (cmd.equalsIgnoreCase("p") || cmd.equalsIgnoreCase("pose")) {
         cyclePose();
-    } else if (cmd.indexOf(':') != -1 && (cmd.startsWith("T:") || cmd.startsWith("I:") || cmd.startsWith("M:") ||
-                                         cmd.startsWith("R:") || cmd.startsWith("P:") || cmd.startsWith("t:") ||
-                                         cmd.startsWith("i:") || cmd.startsWith("m:") || cmd.startsWith("r:") ||
-                                         cmd.startsWith("p:"))) {
-        parseAnglePacket(cmd);
-        Serial.printf("[*] Varied angles set: T:%.0f I:%.0f M:%.0f R:%.0f P:%.0f\n",
-                      currentAngles[0], currentAngles[1], currentAngles[2], currentAngles[3], currentAngles[4]);
+    } else if (cmd.length() == 1 && cmd[0] >= '0' && cmd[0] <= '4') {
+        activeChannel = cmd[0] - '0';
+        Serial.printf("[*] Selected Active Channel: %d (%s)\n", activeChannel, FINGER_NAMES[activeChannel]);
     } else if (cmd.startsWith("all ") || cmd.startsWith("ALL ")) {
         float ang = cmd.substring(4).toFloat();
         ang = constrain(ang, 0.0f, 180.0f);
@@ -384,61 +369,14 @@ void processCommand(String cmd) {
         }
         setDirectGPIOServo(ang);
         Serial.printf("[*] Direct pin D5 commanded to %.1f deg.\n", ang);
-    } else if (cmd.length() == 1 && cmd[0] >= '0' && cmd[0] <= '4') {
-        activeChannel = cmd[0] - '0';
-        Serial.printf("[*] Selected Active Channel: %d (%s)\n", activeChannel, FINGER_NAMES[activeChannel]);
     } else {
-        // Check for 5 varied angle numbers: e.g. "30 60 90 120 150" or "angles 30 60 90 120 150"
-        String numStr = cmd;
-        if (numStr.startsWith("angles ") || numStr.startsWith("ANGLES ")) {
-            numStr = numStr.substring(7);
-            numStr.trim();
-        }
-        float parsedVals[5];
-        int tokenCount = 0;
-        int idx = 0;
-        while (idx < numStr.length() && tokenCount < 5) {
-            int nextSpace = numStr.indexOf(' ', idx);
-            int nextComma = numStr.indexOf(',', idx);
-            int sep = -1;
-            if (nextSpace != -1 && nextComma != -1) sep = min(nextSpace, nextComma);
-            else if (nextSpace != -1) sep = nextSpace;
-            else sep = nextComma;
-            if (sep == -1) sep = numStr.length();
-
-            String tok = numStr.substring(idx, sep);
-            tok.trim();
-            if (tok.length() > 0 && (isDigit(tok[0]) || (tok.length() > 1 && tok[0] == '-' && isDigit(tok[1])))) {
-                parsedVals[tokenCount++] = tok.toFloat();
-            }
-            idx = sep + 1;
-            while (idx < numStr.length() && (numStr[idx] == ' ' || numStr[idx] == ',')) idx++;
-        }
-
-        if (tokenCount == 5) {
-            for (int i = 0; i < 5; i++) {
-                writeAngleHardware(i, parsedVals[i]);
-            }
-            Serial.printf("[*] Varied 5-finger angles applied: T:%.0f I:%.0f M:%.0f R:%.0f P:%.0f\n",
-                          currentAngles[0], currentAngles[1], currentAngles[2], currentAngles[3], currentAngles[4]);
-        } else if (tokenCount == 2 && (cmd[0] >= '0' && cmd[0] <= '4')) {
-            // Direct channel + angle command: "0 90" or "1 45"
-            int ch = (int)parsedVals[0];
-            float ang = parsedVals[1];
-            if (ch >= 0 && ch < NUM_SERVOS) {
-                activeChannel = ch;
-                writeAngleHardware(ch, ang);
-                Serial.printf("[*] %s (CH %d) set to %.1f deg\n", FINGER_NAMES[ch], ch, ang);
-            }
+        // Assume single numeric angle for active channel
+        float ang = cmd.toFloat();
+        if (ang >= 0.0f && ang <= 180.0f) {
+            writeAngleHardware(activeChannel, ang);
+            Serial.printf("[*] %s (CH %d) set to %.1f deg\n", FINGER_NAMES[activeChannel], activeChannel, ang);
         } else {
-            // Assume single numeric angle for active channel
-            float ang = cmd.toFloat();
-            if (ang >= 0.0f && ang <= 180.0f) {
-                writeAngleHardware(activeChannel, ang);
-                Serial.printf("[*] %s (CH %d) set to %.1f deg\n", FINGER_NAMES[activeChannel], activeChannel, ang);
-            } else {
-                Serial.println("[?] Unknown command. Type 'help' or '?' for available commands.");
-            }
+            Serial.println("[?] Unknown command. Type 'help' or '?' for available commands.");
         }
     }
 }
@@ -449,6 +387,11 @@ void processCommand(String cmd) {
 void setup() {
     Serial.begin(115200);
     delay(800);
+
+    // Disable ESP8266 Wi-Fi radio so background interrupts do not affect software I2C timing
+    WiFi.mode(WIFI_OFF);
+    WiFi.forceSleepBegin();
+    delay(10);
 
     Serial.println();
     Serial.println("=======================================================");
