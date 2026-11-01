@@ -60,6 +60,8 @@ The mechanical joint foundation is inspired by the open-source InMoov robot arm,
 - [firmware/](firmware/README.md)
   - [esp32_krypton/](firmware/esp32_krypton/): Production firmware with async web dashboard, WebSockets, UDP socket receiver, and trajectory smoothing.
   - [esp32_servo_tester/](firmware/esp32_servo_tester/): Standalone bench testing sketch and wiring guide for 12V battery + SZBK07 buck converter + PCA9685.
+  - [esp8266_servo_tester/](firmware/esp8266_servo_tester/): Standalone ESP8266 bench testing sketch for PCA9685 I2C tuning.
+  - [esp8266_direct_servo_tester/](firmware/esp8266_direct_servo_tester/): Direct single-pin servo sweep sketch on GPIO 14 (D5) for isolated zero-I2C bench testing.
 - [vision/](vision/README.md)
   - [hand_tracker.py](vision/hand_tracker.py): Real-time MediaPipe right-hand tracking loop with multi-knuckle scale normalization.
   - [communicator.py](vision/communicator.py): Multi-mode transmission handler (Serial with auto-reconnect, Wi-Fi UDP).
@@ -92,6 +94,31 @@ pip install -r requirements.txt
 python hand_tracker.py --mirror --mode udp --ip 192.168.4.1
 ```
 Aim your webcam at your right hand. The arm will mirror your finger movements in real time.
+
+---
+
+## Real-World Build Notes & Engineering Insights
+
+Physical fabrication and hands-on assembly frequently expose edge cases that theoretical CAD and stock assembly guides overlook. Below are documented real-world hurdles encountered during testing, along with the mechanical and electrical workarounds developed on the bench.
+
+### 1. ESP32 Silicon Failure & Emergency Bench Testing Rig
+During active bench testing, the primary ESP32 development board suffered an electrical burnout and the MCU died. To continue calibrating mechanical linkages without pausing the project:
+- An ESP8266 (NodeMCU) was temporarily wired in as a backup driver.
+- Due to ESP8266 software I2C timing constraints and open-drain default states on the PCA9685 driver, multi-channel simultaneous sweep proved finicky on the temporary bench harness.
+- **The Solution**: Transitioned to direct single-servo calibration using isolated 5V/6V bench power. By testing and sweeping each MG996R individually (see `firmware/esp8266_direct_servo_tester/`), each finger's mechanical range and tendon travel were verified independently without risking bus brownouts or driver lockup.
+
+### 2. Fastener Shear, Pulley Redesign & Thread Fatigue
+The standard assembly procedure recommended pulling braided line taut, clamping it down under the horn retaining screw, and relying on high clamp force:
+- Braided 110 lb PE line is extremely slick (low friction coefficient) and resisted standard clamping pressure.
+- Increasing torque on M3 retaining screws into 3D-printed pulley bosses led to stripped threads, sheared fasteners, and cracked pulley hubs under dynamic tension.
+- **The Solution**: Reprinted fresh pulleys (`ServoPulleyHitecV5_tighter.stl`) with reinforced perimeter walls (4 perimeters, 40% gyroid infill) and re-engineered the tensioning mechanism entirely to eliminate fastener reliance.
+
+### 3. Custom 180-Degree Rotational Tensioning (Zero-Glue Geometric Lock)
+Rather than relying on excessive screw torque or messy cyanoacrylate (superglue) that can degrade braided fibers or fail under shock loads, a custom mechanical tensioning method was engineered:
+- **180-Degree Pulley Offset**: The pulley winch was rotated 180 degrees opposite its standard zero orientation prior to string routing.
+- **Geometric Wrap Mechanics**: The braided tendon line was routed through the spool anchor channel and wrapped around the pulley circumference in reverse.
+- **Rotational Pre-Tensioning**: When rotating the servo horn back 180 degrees to its true home position, the line naturally winds onto the spool channel under continuous mechanical tension—leveraging the capstan effect and circumference geometry.
+- **Result**: The tendon achieves precise, rock-solid tension purely through rotational geometry and friction wrap. No overtightening of screws into plastic, zero broken fasteners, zero cracked pulleys, and zero need for CA glue at the servo winch.
 
 ---
 

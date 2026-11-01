@@ -23,3 +23,7 @@
 ### 6. Finger Jams Halfway Through Flexion Sweep
 - **Cause**: The braided line is snagging on internal layer line bridges inside the `RobCableFrontV3` routing comb or knuckle channels.
 - **Fix**: Pass a piece of stiff 0.8mm wire or a 1.5mm hand twist drill through the channel to clear stringing, or apply a drop of PTFE dry lubricant along the tendon pathway.
+
+### 7. Pulley Hub Cracking or Retaining Screw Shearing Under Tension
+- **Cause**: Trying to clamp down on slippery 110 lb braided line by over-torquing M3 screws into 3D-printed plastic hubs causes layer shear and fastener breakage.
+- **Fix**: Reprint pulleys with 4+ perimeter walls and 40% gyroid infill (`ServoPulleyHitecV5_tighter.stl`). Switch to the 180-degree rotational tensioning technique detailed in the assembly guide and main README, which utilizes spool wrap geometry to lock line tension rather than mechanical clamping force.

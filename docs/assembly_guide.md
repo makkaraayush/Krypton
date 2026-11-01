@@ -65,6 +65,15 @@ This guide covers the assembly of the Krypton bionic arm from freshly printed pl
    - Pull the line taut until there is zero slack, but not so tight that it lifts the servo horn.
    - Tie off the line using a **Palomar Knot** or **Figure-8 Knot**.
    - Apply a drop of **CA superglue (Fevikwik)** directly onto the knot. Let it cure for 5 minutes before cutting the excess tag end.
+
+> [!TIP]
+> **Pro Engineering Technique: 180-Degree Rotational Tensioning (Zero-Glue Geometric Lock)**
+> If you experience fastener stress or find that tightening retaining screws into plastic pulley bosses risks stripping threads or cracking the hub, use the rotational pre-tensioning method:
+> 1. Rotate the servo horn/pulley 180 degrees opposite the tendon pull direction.
+> 2. Anchor the braided line to the pulley spool eyelet and route it in reverse around the spool channel.
+> 3. Pull the finger straight and anchor the fingertip knot taut.
+> 4. Rotate the pulley back 180 degrees to its true home position. The 180-degree sweep naturally takes up line slack and locks tension via circumference geometry and the capstan effect—delivering rigid pre-tension without over-torquing screws into plastic or relying on CA glue at the pulley hub.
+
 5. **Dorsal Return Line (Elastic or Second Tendon)**:
    - For active extension, route a return line along the dorsal channel back to the opposite side of the servo pulley winch, or use 1mm elastic shock cord inside the dorsal groove to provide passive return.
 
