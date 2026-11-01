@@ -1,8 +1,13 @@
-# ESP8266 Servo Tester & Bench Calibration Guide
+# ESP8266 Complete Servo Controller & Bench Tester
 
-This directory contains a standalone bench testing sketch for testing your TowerPro MG996R servos with an **ESP8266** (NodeMCU, Wemos D1 Mini, or generic ESP-12), the **SZBK07 300W 20A buck converter**, and the **PCA9685 16-channel PWM driver**.
+This sketch is a drop-in replacement for the ESP32 controller, engineered specifically for the **ESP8266** (NodeMCU, Wemos D1 Mini, or generic ESP-12) to test pulleys, check varied multi-finger angles, and tune tendons via the **SZBK07 300W 20A buck converter** and the **PCA9685 16-channel PWM driver**.
 
-It serves as a temporary drop-in bench tester while your ESP32 is offline. It runs directly via the Arduino IDE Serial Monitor at 115200 baud without requiring Wi-Fi, WebSockets, or Python scripts.
+It matches the ESP32 firmware features:
+- **Same Input Commands**: Supports the standard telemetry packet (`T:45,I:90,M:120,R:60,P:30`), direct 5-number varied lists (`30 60 90 120 150`), and `POSE:...` commands.
+- **Varied Multi-Finger Angles**: Test completely different angles on each finger simultaneously to evaluate grip combinations and tendon tension.
+- **Trajectory Smoothing**: Includes the same software motion interpolation (~66Hz easing) to step servos gradually and avoid snapping braided lines under sudden torque spikes.
+- **Cyberpunk Web Dashboard**: Broadcasts `Krypton-Arm` Wi-Fi network with an embedded mobile-responsive dark dashboard (`http://192.168.4.1`) featuring 5 independent finger sliders and preset buttons.
+- **UDP Telemetry (Port 8888)**: Compatible with `tools/servo_test.py` and the Python vision tracking pipeline.
 
 ---
 
@@ -41,7 +46,6 @@ It serves as a temporary drop-in bench tester while your ESP32 is offline. It ru
 | `3V3` | 3.3V Rail | `VCC` | Powers PCA9685 logic. **Never connect 6.0V to VCC!** |
 | `D2` | `GPIO 4` | `SDA` | I2C Data line (400kHz fast mode) |
 | `D1` | `GPIO 5` | `SCL` | I2C Clock line (400kHz fast mode) |
-| `D5` *(Optional)* | `GPIO 14` | Servo PWM Lead | Only used if testing a single servo directly without PCA9685 |
 
 ---
 
@@ -63,41 +67,69 @@ It serves as a temporary drop-in bench tester while your ESP32 is offline. It ru
 
 ---
 
-## 3. Pulley Testing & Calibration Sequence
+## 3. Controlling Varied Angles
 
-1. **Check 6V Rail**: Multimeter across SZBK07 `OUT+` and `OUT-` must measure **6.00V DC**.
-2. **Boot & Verify Zero (`z`)**:
-   - When the sketch boots, it initializes the PCA9685 at `0x40` and moves all 5 servos to 0 degrees (open hand position).
-   - If you need to re-zero at any point, enter `z`.
-3. **Mount Yellow Winch Pulleys**:
-   - With the servos holding firmly at 0 degrees, press each yellow `ServoPulleyHitecV5_tighter.stl` spool onto the 25T spline with its tie-off hole pointed straight toward the forearm spine.
-   - Tighten the center screw.
-4. **Individual Sweep (`s`)**:
-   - Enter `0`, then `s` to sweep the Thumb.
-   - Enter `1`, then `s` to sweep the Index.
-   - Check that the braided line winds smoothly in the track without jumping off.
-5. **Full Stress Test (`w`)**:
-   - Enter `w` to sweep all 5 fingers simultaneously.
-   - Monitor the 6.00V supply: the voltage should hold steady without resetting the ESP8266.
+You can test varied multi-finger positions using any of the following input methods:
+
+### Method A: ESP32 Telemetry String (Serial or UDP)
+Send exact angle assignments in one line:
+```text
+T:45,I:90,M:120,R:60,P:30
+```
+*(Sets Thumb to 45°, Index to 90°, Middle to 120°, Ring to 60°, Pinky to 30°)*
+
+You can also send partial updates:
+```text
+T:0,I:180
+```
+
+### Method B: Shorthand Number Lists
+Type 5 numbers separated by spaces or commas:
+```text
+30 60 90 120 150
+```
+or
+```text
+angles 10, 45, 90, 135, 180
+```
+
+### Method C: Channel + Angle Direct Pairs
+```text
+0 45      (Sets Channel 0 / Thumb to 45 deg)
+1 90      (Sets Channel 1 / Index to 90 deg)
+2 120     (Sets Channel 2 / Middle to 120 deg)
+3 60      (Sets Channel 3 / Ring to 60 deg)
+4 180     (Sets Channel 4 / Pinky to 180 deg)
+```
+
+### Method D: Web Dashboard Sliders (Wireless Phone / PC)
+1. Connect to Wi-Fi access point: **`Krypton-Arm`** (Password: **`cyberpunk2026`**).
+2. Open a browser and go to **`http://192.168.4.1`**.
+3. Drag the individual finger sliders to inspect pulley wrapping at varied angles in real time.
+
+### Method E: Python Test Utility
+From the `tools/` folder on your computer:
+```bash
+# Over Serial:
+python tools/servo_test.py --mode serial --channel 1 --angle 90
+
+# Preset Poses:
+python tools/servo_test.py --mode serial --pose rock
+```
 
 ---
 
-## 4. Interactive Serial Commands
+## 4. Bench Testing & Calibration Commands
 
-| Command | Action |
-| :--- | :--- |
-| `0` to `4` | Selects active finger (0:Thumb, 1:Index, 2:Middle, 3:Ring, 4:Pinky) |
-| `0` | Moves selected finger to 0 degrees (fully open) |
-| `90` | Moves selected finger to 90 degrees (half grip) |
-| `180` | Moves selected finger to 180 degrees (full fist) |
-| `<any angle>` | Moves selected finger to specified degrees (0-180) |
-| `all <angle>` | Moves all 5 fingers simultaneously (e.g. `all 0`, `all 90`) |
-| `s` | Sweeps active finger smoothly (0 -> 180 -> 0) |
-| `w` | Sweeps all 5 fingers together (buck converter stress test) |
-| `z` | Zeros all 5 channels to 0 degrees (mandatory before mounting pulleys) |
-| `p` | Cycles through preset poses (Open, Fist, Point, Peace, Thumbs Up, Rock On) |
-| `scan` | Runs live I2C bus scanner (checks D1 and D2 lines) |
-| `status` | Prints live angles and calibrated pulse limits table |
-| `trim <min> <max>` | Sets custom 12-bit pulse limits for active channel (e.g. `trim 104 508`) |
-| `gpio <angle>` | Drives a single servo on pin D5 directly |
-| `?` or `help` | Prints command reference list |
+| Command | Action | Purpose |
+| :--- | :--- | :--- |
+| `z` | Immediately zeros all 5 channels to 0° | **Mandatory before mounting pulleys** |
+| `s` | Sweeps active finger (0 -> 180 -> 0) | Checks pulley winding track |
+| `w` | Sweeps all 5 fingers simultaneously | High-current stress test for buck converter |
+| `smooth` | Toggles trajectory easing ON / OFF | Switch between smooth easing and instant jump |
+| `all <angle>` | Moves all fingers to the same angle | Uniform closure test (e.g. `all 90`) |
+| `fist`, `open`, `peace`, `point`, `rock_on`, `pinch` | Applies preset gestures | Quick posture checks |
+| `trim <min> <max>` | Sets calibrated 12-bit pulse limits | Stops resting potentiometer buzz |
+| `status` | Prints live angles and pulse trims table | Verifies internal state |
+| `scan` | Runs live I2C bus scanner | Verifies SDA/SCL lines |
+| `?` or `help` | Prints command reference list | Cheat sheet |
