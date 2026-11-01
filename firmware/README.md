@@ -6,6 +6,7 @@ The firmware runs on an ESP32 dual-core microcontroller and offloads 50Hz PWM si
 
 - [esp32_krypton/](esp32_krypton/): Production firmware with async cyberpunk web dashboard, WebSockets, UDP socket receiver, and gesture engine.
 - [esp32_servo_tester/](esp32_servo_tester/): Standalone bench testing and calibration sketch for 12V battery + SZBK07 buck converter + PCA9685. Features interactive serial menu, zeroing mode, single/multi-finger sweep, and live pulse trimming.
+- [esp8266_servo_tester/](esp8266_servo_tester/): Standalone ESP8266 (NodeMCU / D1 Mini) bench testing sketch for zeroing, sweeping, and tuning pulleys via PCA9685 I2C (SDA=D2, SCL=D1).
 
 ---
 
