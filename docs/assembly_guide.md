@@ -34,7 +34,7 @@ This guide covers the assembly of the Krypton bionic arm from freshly printed pl
 2. Seat the 5x **TowerPro MG996R servos** into `RobServoBedV5.stl`. Fasten each servo with four M3 x 12mm screws and washers so the output shafts alternate sides for compact packaging.
 3. Fasten the `RobCableFrontV3.stl` and `RobCableBackV3.stl` cable routing combs directly over the servo bed. These guide the 5 pairs of braided lines and prevent crossing or snagging before the lines reach the wrist.
 4. Mount the loaded servo bed into the forearm chassis cradle and secure with M3 screws.
-5. Assemble the wrist collar (`WristlargeV4`, `WristsmallV4`, `robcap3V2`) using the M8 bolts, washers, and M8 Nyloc nuts.
+5. Assemble the wrist collar (`WristlargeV4`, `WristsmallV4`, `robcap3V2`) using the 3D-printed M8 pins and spacer sleeve (`Bolt_entretoise7.stl`).
 
 ---
 

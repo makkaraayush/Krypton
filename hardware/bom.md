@@ -13,12 +13,9 @@ Instead of using custom ground dowel pins (which cost ₹5.20 each and easily sl
 | M3 x 20mm Socket Screws | 30 | High-Tensile 12.9 Black-Oxide | 16 for finger knuckles, 10 for forearm chassis (`robpart1V2` to `robpart5V4`), 4 spares | ₹78.00 |
 | M3 Nyloc Nuts | 30 | SS304 DIN985 | 16 for knuckles, 8 for chassis spine, 6 spares | ₹66.00 |
 | M3 x 12mm Socket Screws | 26 | High-Tensile 12.9 Black-Oxide | 20 for mounting 5 servos into `RobServoBedV5`, 4 for `RobCable` combs & electronics, 2 spares | ₹52.00 |
-| M8 x 80mm Socket Screws | 2 | Black-Oxide Grade 8.8 | Connects WristlargeV4 to WristsmallV4 (1 required + 1 spare) | ₹40.00 |
-| M8 x 60mm Socket Screws | 2 | Black-Oxide Grade 8.8 | Connects WristlargeV4 to forearm base (1 required + 1 spare) | ₹23.60 |
-| M8 x 40mm Socket Screws | 2 | Black-Oxide Grade 8.8 | Connects WristlargeV4 to thumb base pivot (1 required + 1 spare) | ₹16.00 |
-| M8 Nyloc Nuts | 4 | SS304 DIN982 | 3 required for M8 bolts, 1 spare | ₹30.40 |
-| M8 Plain Washers | 6 | GI Plated (ID 8.2mm, OD 17mm) | Distributes clamp pressure across printed plastic | ₹4.80 |
-| **Total Fasteners** | | | | **₹310.80** |
+| **Total Fasteners** | | | | **₹196.00** |
+
+> Note: All M8 wrist hardware, axle pins, and spacer sleeves (such as `Bolt_entretoise7.stl`) are 3D printed directly. The physical fastener bill of materials is standardized 100% on M3 socket screws (12mm and 20mm) and M3 Nyloc nuts, allowing the entire arm to be assembled using a single 2.5mm hex key.
 
 ---
 
