@@ -1,13 +1,8 @@
-# ESP8266 Complete Servo Controller & Bench Tester
+# Standalone ESP8266 Servo Tester & Bench Calibration Guide
 
-This sketch is a drop-in replacement for the ESP32 controller, engineered specifically for the **ESP8266** (NodeMCU, Wemos D1 Mini, or generic ESP-12) to test pulleys, check varied multi-finger angles, and tune tendons via the **SZBK07 300W 20A buck converter** and the **PCA9685 16-channel PWM driver**.
+This directory contains the ESP8266 bench testing sketch for testing your TowerPro MG996R servos with a **12V battery**, the **SZBK07 300W 20A buck converter**, and the **PCA9685 16-channel PWM driver**.
 
-It matches the ESP32 firmware features:
-- **Same Input Commands**: Supports the standard telemetry packet (`T:45,I:90,M:120,R:60,P:30`), direct 5-number varied lists (`30 60 90 120 150`), and `POSE:...` commands.
-- **Varied Multi-Finger Angles**: Test completely different angles on each finger simultaneously to evaluate grip combinations and tendon tension.
-- **Trajectory Smoothing**: Includes the same software motion interpolation (~66Hz easing) to step servos gradually and avoid snapping braided lines under sudden torque spikes.
-- **Cyberpunk Web Dashboard**: Broadcasts `Krypton-Arm` Wi-Fi network with an embedded mobile-responsive dark dashboard (`http://192.168.4.1`) featuring 5 independent finger sliders and preset buttons.
-- **UDP Telemetry (Port 8888)**: Compatible with `tools/servo_test.py` and the Python vision tracking pipeline.
+It is the exact drop-in ESP8266 version of the `esp32_servo_tester` sketch. It does not require Wi-Fi or WebSockets; it runs directly via the Arduino IDE Serial Monitor at 115200 baud.
 
 ---
 
@@ -22,7 +17,7 @@ It matches the ESP32 firmware features:
       └──(–)──> [IN-] SZBK07 300W 20A Buck [OUT- (GND)]  ──> [PCA9685 Green Screw GND]
 
 [ PCA9685 Left 6-Pin Header ]                   [ ESP8266 (NodeMCU / D1 Mini) ]
-  ├── V+  (6.0V Motor Rail) ───────────────────> VIN / 5V Pin (Powers onboard 3.3V LDO)
+  ├── V+  (6.0V Motor Rail) ───────────────────> VIN / 5V Pin  (Powers ESP8266 onboard LDO)
   ├── GND (Common Ground)   ───────────────────> GND Pin
   ├── VCC (3.3V Logic Rail) <─────────────────── 3V3 Pin (Powers PCA9685 chip)
   ├── SDA (I2C Data)        <─────────────────── D2 Pin (GPIO 4)
@@ -37,99 +32,68 @@ It matches the ESP32 firmware features:
   └── Channel 4 ──> Pinky (Auriculaire) MG996R Servo
 ```
 
-### Pin Table
+### Connection Pinout Table
 
-| ESP8266 Pin | NodeMCU GPIO | PCA9685 Pin | Notes |
-| :--- | :--- | :--- | :--- |
-| `VIN` / `5V` | Internal LDO | `V+` (Left Header) | Receives 6.0V from buck converter to power board |
-| `GND` | Ground | `GND` | Common ground reference |
-| `3V3` | 3.3V Rail | `VCC` | Powers PCA9685 logic. **Never connect 6.0V to VCC!** |
-| `D2` | `GPIO 4` | `SDA` | I2C Data line (400kHz fast mode) |
-| `D1` | `GPIO 5` | `SCL` | I2C Clock line (400kHz fast mode) |
+| ESP8266 Pin | NodeMCU Pin | PCA9685 Pin | Wire Type | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| `VIN` / `5V` | `VIN` / `5V` | `V+` (Left Header) | Dupont | Receives 6.0V from buck to power ESP8266 onboard regulator |
+| `GND` | `GND` | `GND` (Left Header) | Dupont | Common ground reference |
+| `3V3` | `3V3` | `VCC` (Left Header) | Dupont | Powers PCA9685 3.3V logic (**never connect 6V to VCC**) |
+| `D2` | `GPIO 4` | `SDA` (Left Header) | Dupont | I2C Serial Data line |
+| `D1` | `GPIO 5` | `SCL` (Left Header) | Dupont | I2C Serial Clock line |
+| `D5` *(Opt)* | `GPIO 14` | Servo Signal | Dupont | Direct pin test if testing single servo without PCA9685 |
 
 ---
 
 ## 2. Flashing Instructions (Arduino IDE)
 
-1. **Install ESP8266 Core**:
-   - Go to *File* -> *Preferences*.
-   - Add `http://arduino.esp8266.com/stable/package_esp8266com_index.json` to Additional Board Manager URLs.
-   - Go to *Tools* -> *Board* -> *Boards Manager*, search for `esp8266`, and install it.
-2. **Select Board**:
-   - For NodeMCU: Select `NodeMCU 1.0 (ESP-12E Module)`.
-   - For Wemos: Select `LOLIN(WEMOS) D1 R2 & mini`.
-   - Upload Speed: `115200` or `921600`.
-   - CPU Frequency: `80 MHz`.
-3. **Open and Upload**:
-   - Open `esp8266_servo_tester.ino`.
-   - Select your COM port and click **Upload**.
-   - Open Serial Monitor at **115200 baud** (set line ending to **Newline**).
+1. **Board Configuration**:
+   - Board: `NodeMCU 1.0 (ESP-12E Module)` or `LOLIN(WEMOS) D1 R2 & mini`
+   - Upload Speed: `115200` or `921600`
+   - CPU Frequency: `80 MHz`
+   - Port: Select your ESP8266 COM port
+2. **Compile & Upload**:
+   - Open `firmware/esp8266_servo_tester/esp8266_servo_tester.ino`.
+   - Click **Upload**.
+3. **Open Serial Monitor**:
+   - Set baud rate to **115200**.
+   - Set line ending to **Newline** or **Both NL & CR**.
+   - Press the `RST` button on your ESP8266.
 
 ---
 
-## 3. Controlling Varied Angles
+## 3. Interactive Serial Commands
 
-You can test varied multi-finger positions using any of the following input methods:
-
-### Method A: ESP32 Telemetry String (Serial or UDP)
-Send exact angle assignments in one line:
-```text
-T:45,I:90,M:120,R:60,P:30
-```
-*(Sets Thumb to 45°, Index to 90°, Middle to 120°, Ring to 60°, Pinky to 30°)*
-
-You can also send partial updates:
-```text
-T:0,I:180
-```
-
-### Method B: Shorthand Number Lists
-Type 5 numbers separated by spaces or commas:
-```text
-30 60 90 120 150
-```
-or
-```text
-angles 10, 45, 90, 135, 180
-```
-
-### Method C: Channel + Angle Direct Pairs
-```text
-0 45      (Sets Channel 0 / Thumb to 45 deg)
-1 90      (Sets Channel 1 / Index to 90 deg)
-2 120     (Sets Channel 2 / Middle to 120 deg)
-3 60      (Sets Channel 3 / Ring to 60 deg)
-4 180     (Sets Channel 4 / Pinky to 180 deg)
-```
-
-### Method D: Web Dashboard Sliders (Wireless Phone / PC)
-1. Connect to Wi-Fi access point: **`Krypton-Arm`** (Password: **`cyberpunk2026`**).
-2. Open a browser and go to **`http://192.168.4.1`**.
-3. Drag the individual finger sliders to inspect pulley wrapping at varied angles in real time.
-
-### Method E: Python Test Utility
-From the `tools/` folder on your computer:
-```bash
-# Over Serial:
-python tools/servo_test.py --mode serial --channel 1 --angle 90
-
-# Preset Poses:
-python tools/servo_test.py --mode serial --pose rock
-```
-
----
-
-## 4. Bench Testing & Calibration Commands
+When the sketch boots, it checks for the PCA9685 at `0x40`. If found, it homes all servos to 0 degrees (open position) and displays the diagnostic menu.
 
 | Command | Action | Purpose |
 | :--- | :--- | :--- |
-| `z` | Immediately zeros all 5 channels to 0° | **Mandatory before mounting pulleys** |
-| `s` | Sweeps active finger (0 -> 180 -> 0) | Checks pulley winding track |
-| `w` | Sweeps all 5 fingers simultaneously | High-current stress test for buck converter |
-| `smooth` | Toggles trajectory easing ON / OFF | Switch between smooth easing and instant jump |
-| `all <angle>` | Moves all fingers to the same angle | Uniform closure test (e.g. `all 90`) |
-| `fist`, `open`, `peace`, `point`, `rock_on`, `pinch` | Applies preset gestures | Quick posture checks |
-| `trim <min> <max>` | Sets calibrated 12-bit pulse limits | Stops resting potentiometer buzz |
-| `status` | Prints live angles and pulse trims table | Verifies internal state |
-| `scan` | Runs live I2C bus scanner | Verifies SDA/SCL lines |
+| `0` to `4` | Selects active channel (0:Thumb, 1:Index, 2:Middle, 3:Ring, 4:Pinky) | Switch focus finger |
+| `<angle>` | Moves selected finger to specified degrees (0-180) | Fine positional testing |
+| `<ch> <angle>` | Moves specific channel directly (e.g. `0 45`, `1 90`, `2 120`) | Direct single-channel move |
+| `all <angle>` | Moves all 5 fingers to the same angle (e.g. `all 0`, `all 90`) | Coordinated positioning |
+| `T:..,I:..` | Multi-finger packet (e.g. `T:45,I:90,M:120,R:60,P:30`) | **Varied angle test across all fingers** |
+| `<5 angles>` | List of 5 varied numbers (e.g. `30 60 90 120 150`) | **Quick varied angle list** |
+| `s` | Sweeps active finger smoothly (0 -> 180 -> 0) | Checks pulley winding track |
+| `w` | Sweeps all 5 fingers together | **Stress test**: verifies 6.0V buck does not brownout |
+| `z` | Immediately zeros all 5 channels to 0 degrees | **Mandatory before mounting pulleys** |
+| `p` | Cycles through preset poses (Open, Fist, Point, Peace, Rock On) | Quick posture checks |
+| `scan` | Runs live I2C bus scanner | Verifies SDA (D2) and SCL (D1) wiring |
+| `status` | Prints live angles and calibrated pulse limits table | Verification diagnostic |
+| `trim <min> <max>` | Sets custom 12-bit pulse limits (e.g. `trim 104 508`) | Stops resting servo hum |
+| `gpio <angle>` | Drives a single servo on ESP8266 pin D5 directly | Test without PCA9685 |
 | `?` or `help` | Prints command reference list | Cheat sheet |
+
+---
+
+## 4. Pulley Bench Testing Sequence
+
+1. **Multimeter Check**: Verify `OUT+` on the SZBK07 buck converter measures **6.00V DC**.
+2. **Flash & Zero (`z`)**: Run `z`. All 5 servos lock at 0 degrees.
+3. **Mount Yellow Pulleys**: Press the yellow `ServoPulleyHitecV5_tighter.stl` winches onto the 25T splines with the line holes pointing straight down the forearm axis. Fasten center screws.
+4. **Varied Angle Check**:
+   - Send `T:45,I:90,M:120,R:60,P:30` or `30 60 90 120 150`.
+   - Inspect each finger's tendon tension and pulley spool winding at different flexions.
+5. **Sweep Test (`s` & `w`)**:
+   - Run `s` on each finger to check for joint binding.
+   - Run `w` to sweep all 5 fingers at once and ensure the 6V rail stays steady.

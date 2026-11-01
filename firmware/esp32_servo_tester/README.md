@@ -127,7 +127,10 @@ When the sketch boots, it will automatically check for the PCA9685 at address `0
 | `90` | Moves selected finger to 90 degrees | Halfway grip |
 | `180` | Moves selected finger to 180 degrees | Full contracted fist |
 | `<any angle>` | Moves selected finger to specified degrees (0-180) | Fine positional testing |
+| `<ch> <angle>` | Moves specific channel directly (e.g. `0 45`, `1 90`, `2 120`) | Direct single-channel move |
 | `all <angle>` | Moves all 5 fingers simultaneously (e.g. `all 0`, `all 90`) | Coordinated positioning |
+| `T:..,I:..` | Multi-finger packet (e.g. `T:45,I:90,M:120,R:60,P:30`) | **Varied angle test across all fingers** |
+| `<5 angles>` | List of 5 varied numbers (e.g. `30 60 90 120 150`) | **Quick varied angle list** |
 | `s` | Sweeps active finger smoothly (0 -> 180 -> 0) | Checks for joint friction / binding |
 | `w` | Sweeps all 5 fingers together | **Stress test**: verifies SZBK07 does not brownout |
 | `z` | Immediately zeros all 5 channels to 0 degrees | **Mandatory before mounting pulleys** |
