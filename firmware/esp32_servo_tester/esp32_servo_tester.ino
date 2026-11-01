@@ -255,10 +255,7 @@ void printMenu() {
     Serial.println("-------------------------------------------------------");
     Serial.println("  0 - 4       : Select active finger (0:Thumb, 1:Index, 2:Mid, 3:Ring, 4:Pinky)");
     Serial.println("  <angle>     : Move active finger to angle 0-180 (e.g. '0', '90', '180')");
-    Serial.println("  <ch> <ang>  : Move specific channel directly (e.g. '0 45', '1 90', '2 120')");
     Serial.println("  all <angle> : Move ALL fingers to angle (e.g. 'all 0', 'all 90')");
-    Serial.println("  T:..,I:..   : Varied angles packet (e.g. 'T:45,I:90,M:120,R:60,P:30')");
-    Serial.println("  <5 angles>  : List of 5 varied angles (e.g. '30 60 90 120 150')");
     Serial.println("  s           : Sweep active finger (0 -> 180 -> 0)");
     Serial.println("  w           : Stress test: sweep ALL 5 fingers together");
     Serial.println("  z           : ZERO ALL fingers to 0 deg (for installing horns)");
@@ -287,27 +284,6 @@ void cyclePose() {
     poseIndex = (poseIndex + 1) % 6;
 }
 
-void parseAnglePacket(const String& line) {
-    int start = 0;
-    while (start < line.length()) {
-        int comma = line.indexOf(',', start);
-        if (comma == -1) comma = line.indexOf(' ', start);
-        if (comma == -1) comma = line.length();
-        String token = line.substring(start, comma);
-        token.trim();
-        token.toUpperCase();
-
-        if (token.startsWith("T:")) writeAngleHardware(0, token.substring(2).toFloat());
-        else if (token.startsWith("I:")) writeAngleHardware(1, token.substring(2).toFloat());
-        else if (token.startsWith("M:")) writeAngleHardware(2, token.substring(2).toFloat());
-        else if (token.startsWith("R:")) writeAngleHardware(3, token.substring(2).toFloat());
-        else if (token.startsWith("P:")) writeAngleHardware(4, token.substring(2).toFloat());
-
-        start = comma + 1;
-        while (start < line.length() && (line[start] == ' ' || line[start] == ',')) start++;
-    }
-}
-
 void processCommand(String cmd) {
     cmd.trim();
     if (cmd.length() == 0) return;
@@ -326,13 +302,9 @@ void processCommand(String cmd) {
         sweepAllSimultaneous();
     } else if (cmd.equalsIgnoreCase("p") || cmd.equalsIgnoreCase("pose")) {
         cyclePose();
-    } else if (cmd.indexOf(':') != -1 && (cmd.startsWith("T:") || cmd.startsWith("I:") || cmd.startsWith("M:") ||
-                                         cmd.startsWith("R:") || cmd.startsWith("P:") || cmd.startsWith("t:") ||
-                                         cmd.startsWith("i:") || cmd.startsWith("m:") || cmd.startsWith("r:") ||
-                                         cmd.startsWith("p:"))) {
-        parseAnglePacket(cmd);
-        Serial.printf("[*] Varied angles set: T:%.0f I:%.0f M:%.0f R:%.0f P:%.0f\n",
-                      currentAngles[0], currentAngles[1], currentAngles[2], currentAngles[3], currentAngles[4]);
+    } else if (cmd.length() == 1 && cmd[0] >= '0' && cmd[0] <= '4') {
+        activeChannel = cmd[0] - '0';
+        Serial.printf("[*] Selected Active Channel: %d (%s)\n", activeChannel, FINGER_NAMES[activeChannel]);
     } else if (cmd.startsWith("all ") || cmd.startsWith("ALL ")) {
         float ang = cmd.substring(4).toFloat();
         ang = constrain(ang, 0.0f, 180.0f);
@@ -365,61 +337,14 @@ void processCommand(String cmd) {
         }
         setDirectGPIOServo(ang);
         Serial.printf("[*] Direct GPIO %d commanded to %.1f deg.\n", DIRECT_GPIO_PIN, ang);
-    } else if (cmd.length() == 1 && cmd[0] >= '0' && cmd[0] <= '4') {
-        activeChannel = cmd[0] - '0';
-        Serial.printf("[*] Selected Active Channel: %d (%s)\n", activeChannel, FINGER_NAMES[activeChannel]);
     } else {
-        // Check for 5 varied angle numbers: e.g. "30 60 90 120 150" or "angles 30 60 90 120 150"
-        String numStr = cmd;
-        if (numStr.startsWith("angles ") || numStr.startsWith("ANGLES ")) {
-            numStr = numStr.substring(7);
-            numStr.trim();
-        }
-        float parsedVals[5];
-        int tokenCount = 0;
-        int idx = 0;
-        while (idx < numStr.length() && tokenCount < 5) {
-            int nextSpace = numStr.indexOf(' ', idx);
-            int nextComma = numStr.indexOf(',', idx);
-            int sep = -1;
-            if (nextSpace != -1 && nextComma != -1) sep = min(nextSpace, nextComma);
-            else if (nextSpace != -1) sep = nextSpace;
-            else sep = nextComma;
-            if (sep == -1) sep = numStr.length();
-
-            String tok = numStr.substring(idx, sep);
-            tok.trim();
-            if (tok.length() > 0 && (isDigit(tok[0]) || (tok.length() > 1 && tok[0] == '-' && isDigit(tok[1])))) {
-                parsedVals[tokenCount++] = tok.toFloat();
-            }
-            idx = sep + 1;
-            while (idx < numStr.length() && (numStr[idx] == ' ' || numStr[idx] == ',')) idx++;
-        }
-
-        if (tokenCount == 5) {
-            for (int i = 0; i < 5; i++) {
-                writeAngleHardware(i, parsedVals[i]);
-            }
-            Serial.printf("[*] Varied 5-finger angles applied: T:%.0f I:%.0f M:%.0f R:%.0f P:%.0f\n",
-                          currentAngles[0], currentAngles[1], currentAngles[2], currentAngles[3], currentAngles[4]);
-        } else if (tokenCount == 2 && (cmd[0] >= '0' && cmd[0] <= '4')) {
-            // Direct channel + angle command: "0 90" or "1 45"
-            int ch = (int)parsedVals[0];
-            float ang = parsedVals[1];
-            if (ch >= 0 && ch < NUM_SERVOS) {
-                activeChannel = ch;
-                writeAngleHardware(ch, ang);
-                Serial.printf("[*] %s (CH %d) set to %.1f deg\n", FINGER_NAMES[ch], ch, ang);
-            }
+        // Assume single numeric angle for active channel
+        float ang = cmd.toFloat();
+        if (ang >= 0.0f && ang <= 180.0f) {
+            writeAngleHardware(activeChannel, ang);
+            Serial.printf("[*] %s (CH %d) set to %.1f deg\n", FINGER_NAMES[activeChannel], activeChannel, ang);
         } else {
-            // Assume single numeric angle for active channel
-            float ang = cmd.toFloat();
-            if (ang >= 0.0f && ang <= 180.0f) {
-                writeAngleHardware(activeChannel, ang);
-                Serial.printf("[*] %s (CH %d) set to %.1f deg\n", FINGER_NAMES[activeChannel], activeChannel, ang);
-            } else {
-                Serial.println("[?] Unknown command. Type 'help' or '?' for available commands.");
-            }
+            Serial.println("[?] Unknown command. Type 'help' or '?' for available commands.");
         }
     }
 }
