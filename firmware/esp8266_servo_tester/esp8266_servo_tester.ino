@@ -54,8 +54,8 @@ const char* FINGER_NAMES[NUM_SERVOS] = { "Thumb", "Index", "Middle", "Ring", "Pi
 // Calibrated 12-bit PWM Ticks (0-4095 at 50Hz)
 // 102 ticks ~= 500 us (0 degrees / fully open)
 // 512 ticks ~= 2500 us (180 degrees / clenched fist)
-uint16_t pulseMin[NUM_SERVOS] = { 102, 105, 102, 104, 106 };
-uint16_t pulseMax[NUM_SERVOS] = { 510, 512, 512, 508, 505 };
+uint16_t pulseMin[NUM_SERVOS] = { 102, 102, 102, 102, 102 };
+uint16_t pulseMax[NUM_SERVOS] = { 540, 540, 540, 540, 540 };
 
 // Current angles
 float currentAngles[NUM_SERVOS] = { 0, 0, 0, 0, 0 };

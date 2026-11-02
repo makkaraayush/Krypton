@@ -28,12 +28,15 @@
 // 102 ticks ~= 500 us (0 degrees)
 // 512 ticks ~= 2500 us (180 degrees)
 // Per-finger pulse trims allow fine mechanical zero calibration without re-seating servo horns:
-const uint16_t SERVO_PULSE_MIN_MAP[NUM_SERVOS] = { 102, 105, 102, 104, 106 }; // Thumb, Index, Middle, Ring, Pinky
-const uint16_t SERVO_PULSE_MAX_MAP[NUM_SERVOS] = { 510, 512, 512, 508, 505 };
+// 102 ticks ~= 500 us (0 degrees / open)
+// 540 ticks ~= 2500-2636 us (180 degrees / full tight grip on MG996R)
+// Note: 505-512 ticks only delivers ~160 degrees on real PCA9685 clocks (~26.5MHz), causing loose fingers.
+const uint16_t SERVO_PULSE_MIN_MAP[NUM_SERVOS] = { 102, 102, 102, 102, 102 }; // Thumb, Index, Middle, Ring, Pinky
+const uint16_t SERVO_PULSE_MAX_MAP[NUM_SERVOS] = { 540, 540, 540, 540, 540 };
 
 // Legacy single-value fallback constants
 #define SERVO_PULSE_MIN     102
-#define SERVO_PULSE_MAX     512
+#define SERVO_PULSE_MAX     540
 
 // Per-finger angle limits (degrees: 0 = fully extended open, 180 = fully contracted fist)
 const int SERVO_MIN_ANGLES[NUM_SERVOS] = { 0,   0,   0,   0,   0   };

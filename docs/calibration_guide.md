@@ -19,8 +19,8 @@ Always verify voltages with a multimeter before powering electronics:
 In `firmware/esp32_krypton/config.h`:
 ```cpp
 // Per-finger pulse trims (12-bit PCA9685 ticks, 0 to 4095 @ 50Hz)
-const uint16_t SERVO_PULSE_MIN_MAP[NUM_SERVOS] = { 102, 105, 102, 104, 106 }; // Thumb, Index, Middle, Ring, Pinky
-const uint16_t SERVO_PULSE_MAX_MAP[NUM_SERVOS] = { 510, 512, 512, 508, 505 };
+const uint16_t SERVO_PULSE_MIN_MAP[NUM_SERVOS] = { 102, 102, 102, 102, 102 }; // Thumb, Index, Middle, Ring, Pinky
+const uint16_t SERVO_PULSE_MAX_MAP[NUM_SERVOS] = { 540, 540, 540, 540, 540 };
 ```
 
 Different production batches of TowerPro MG996R servos have slight internal potentiometer variations. Rather than un-screwing the winch spool and jumping teeth on the 25T spline, you can fine-tune mechanical end-stops in firmware:
