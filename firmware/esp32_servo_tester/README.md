@@ -12,7 +12,7 @@ It does not require Wi-Fi, WebSockets, or OpenCV. It runs directly via the Ardui
 - **Voltage Regulator**: SZBK07 (300W 20A Constant-Current / Constant-Voltage Synchronous Step-Down Buck Converter).
 - **Controller**: ESP32 Type-C (38-pin or 30-pin CP2102).
 - **PWM Driver**: PCA9685 16-Channel 12-bit I2C driver (Address `0x40`).
-- **Servos**: 5x TowerPro MG996R metal-gear servos (Channels 0 to 4).
+- **Servos**: 6x TowerPro MG996R metal-gear servos (Channels 0 to 4: Fingers, Channel 5: Wrist Rotation).
 
 ---
 
@@ -54,12 +54,13 @@ Follow these 4 calibration steps before plugging anything into the converter out
   ├── SCL (I2C Clock)       <─────────────────── GPIO 22
   └── OE  (Output Enable)   (Leave Disconnected)
 
-[ PCA9685 3-Pin Servo Headers (Channels 0 to 4) ]
+[ PCA9685 3-Pin Servo Headers (Channels 0 to 5) ]
   ├── Channel 0 ──> Thumb MG996R Servo
   ├── Channel 1 ──> Index MG996R Servo
   ├── Channel 2 ──> Middle (Majeure) MG996R Servo
   ├── Channel 3 ──> Ring MG996R Servo
-  └── Channel 4 ──> Pinky (Auriculaire) MG996R Servo
+  ├── Channel 4 ──> Pinky (Auriculaire) MG996R Servo
+  └── Channel 5 ──> Wrist Rotation MG996R Servo
 ```
 
 > **Clean Wiring Tip**: The `V+` pin on the PCA9685's left 6-pin header is directly tied to the 6.0V motor rail from the green screw terminal! You can run a single 5-wire female-to-female Dupont ribbon cable between the PCA9685 left header and your ESP32.
@@ -122,19 +123,18 @@ When the sketch boots, it will automatically check for the PCA9685 at address `0
 
 | Command | Action | Purpose |
 | :--- | :--- | :--- |
-| `0` to `4` | Selects active channel (0:Thumb, 1:Index, 2:Middle, 3:Ring, 4:Pinky) | Switch focus finger |
-| `0` | Moves selected finger to 0 degrees | Fully open / relaxed |
-| `90` | Moves selected finger to 90 degrees | Halfway grip |
-| `180` | Moves selected finger to 180 degrees | Full contracted fist |
-| `<any angle>` | Moves selected finger to specified degrees (0-180) | Fine positional testing |
-| `all <angle>` | Moves all 5 fingers simultaneously (e.g. `all 0`, `all 90`) | Coordinated positioning |
-| `s` | Sweeps active finger smoothly (0 -> 180 -> 0) | Checks for joint friction / binding |
-| `w` | Sweeps all 5 fingers together | **Stress test**: verifies SZBK07 does not brownout |
-| `z` | Immediately zeros all 5 channels to 0 degrees | **Mandatory before mounting pulleys** |
-| `p` | Cycles through preset poses (Open, Fist, Point, Peace, Rock) | Demonstrates full hand articulation |
+| `0` to `5` | Selects active channel (0:Thumb, 1:Index, 2:Middle, 3:Ring, 4:Pinky, 5:Wrist) | Switch active joint/finger |
+| `wrist` / `thumb`... | Directly selects channel by name (`thumb`, `index`, `middle`, `ring`, `pinky`, `wrist`) | Named quick-switch |
+| `<ch> <angle>` | Moves specified channel directly (e.g. `5 90`, `wrist 180`, `1 45`) | One-shot positioning |
+| `<any angle>` | Moves active channel to specified degrees (0-180) | Fine positional testing |
+| `all <angle>` | Moves all 6 channels simultaneously (e.g. `all 0`, `all 90`) | Coordinated positioning |
+| `s` | Sweeps active channel smoothly (0 -> 180 -> 0) | Checks joint friction / gear binding |
+| `w` | Sweeps all 6 servos together | **Stress test**: verifies SZBK07 does not brownout |
+| `z` | Immediately zeros all 6 channels to 0 degrees | **Mandatory before mounting pulleys/wrist gears** |
+| `p` | Cycles through preset poses (Open, Fist, Point, Peace, Rock, Wrist 90, Wrist 180) | Demonstrates full articulation |
 | `scan` | Runs live I2C bus scanner | Verifies SDA/SCL wiring if board isn't found |
-| `status` | Prints live angles and calibrated pulse limits table | Verification diagnostic |
-| `trim <min> <max>` | Sets custom 12-bit pulse limits (e.g. `trim 104 508`) | Stops resting servo hum |
+| `status` | Prints live angles and calibrated pulse limits table for all 6 channels | Verification diagnostic |
+| `trim <min> <max>` | Sets custom 12-bit pulse limits (e.g. `trim 104 508`) | Calibrates endstops and eliminates hum |
 | `gpio <angle>` | Drives a single servo on ESP32 GPIO 18 directly | Test without PCA9685 attached |
 | `?` or `help` | Prints command reference list | Cheat sheet |
 
@@ -144,7 +144,7 @@ When the sketch boots, it will automatically check for the PCA9685 at address `0
 
 1. **Multimeter Check**: Verify `OUT+` on the SZBK07 is measuring 6.00V DC.
 2. **Flash the Sketch**: Upload and open the Serial Monitor at 115200 baud.
-3. **Verify Zeroing (`z`)**: Run `z`. All 5 servo shafts will rotate to their 0-degree open position.
-4. **Mount Pulleys**: With power active and servos holding at 0 degrees, press the yellow `ServoPulleyHitecV5_tighter.stl` winches onto the 25T splines with the string tie holes aligned straight toward the forearm spine. Tighten the center screw.
-5. **Individual Sweep (`0`, then `s`, `1`, then `s`...)**: Test each finger one by one. Check that the braided line winds cleanly around the pulley track without jumping off.
-6. **Stress Test (`w`)**: Sweep all 5 fingers together. Place your multimeter across `OUT+` and `OUT-` on the SZBK07. The voltage should remain between $5.90\text{V}$ and $6.05\text{V}$ without resetting the ESP32.
+3. **Verify Zeroing (`z`)**: Run `z`. All 6 servo shafts will rotate to their 0-degree home position (open hand, wrist neutral).
+4. **Mount Pulleys & Wrist Gears**: With power active and servos holding at 0 degrees, press the yellow `ServoPulleyHitecV5_tighter.stl` winches and the wrist drive gear (`WristGearsV4.stl`) onto their 25T splines.
+5. **Individual Sweep (`0`, then `s`, `1`, then `s`... `5`, then `s`)**: Test each finger and the wrist rotation one by one. Check that lines wind cleanly and the wrist ring rotates smoothly without tooth skipping.
+6. **Stress Test (`w`)**: Sweep all 6 servos together. Place your multimeter across `OUT+` and `OUT-` on the SZBK07. The voltage should remain between $5.90\text{V}$ and $6.05\text{V}$ without resetting the ESP32.
