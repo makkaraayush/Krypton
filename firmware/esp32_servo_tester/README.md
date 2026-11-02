@@ -119,7 +119,9 @@ Follow these 4 calibration steps before plugging anything into the converter out
 
 ## 6. Interactive Serial Commands
 
-When the sketch boots, it will automatically check for the PCA9685 at address `0x40`. If found, it homes all servos to 0 degrees and prints the diagnostic menu.
+When the sketch boots, it will automatically check for the PCA9685 at address `0x40`. If found, it automatically homes all 6 servos to their calibrated neutral positions:
+- **Fingers (CH 0-4)**: Homing to `0 deg` (fully open hand).
+- **Wrist (CH 5)**: Homing to `90 deg` (straight / neutral center; 0 deg = left rotation, 180 deg = right rotation).
 
 | Command | Action | Purpose |
 | :--- | :--- | :--- |
@@ -127,11 +129,14 @@ When the sketch boots, it will automatically check for the PCA9685 at address `0
 | `wrist` / `thumb`... | Directly selects channel by name (`thumb`, `index`, `middle`, `ring`, `pinky`, `wrist`) | Named quick-switch |
 | `<ch> <angle>` | Moves specified channel directly (e.g. `5 90`, `wrist 180`, `1 45`) | One-shot positioning |
 | `<any angle>` | Moves active channel to specified degrees (0-180) | Fine positional testing |
-| `all <angle>` | Moves all 6 channels simultaneously (e.g. `all 0`, `all 90`) | Coordinated positioning |
-| `s` | Sweeps active channel smoothly (0 -> 180 -> 0) | Checks joint friction / gear binding |
+| `all <angle>` | Moves all 6 channels simultaneously (e.g. `all 90`) | Coordinated positioning |
+| `center` or `c` | Moves wrist to straight neutral (`90 deg`) | Quick wrist center |
+| `left` or `l` | Rotates wrist left (`0 deg`) | Quick wrist left |
+| `right` or `r` | Rotates wrist right (`180 deg`) | Quick wrist right |
+| `s` | Sweeps active channel smoothly (Fingers: 0->180->0, Wrist: 90->0->180->90) | Checks joint friction / gear binding |
 | `w` | Sweeps all 6 servos together | **Stress test**: verifies SZBK07 does not brownout |
-| `z` | Immediately zeros all 6 channels to 0 degrees | **Mandatory before mounting pulleys/wrist gears** |
-| `p` | Cycles through preset poses (Open, Fist, Point, Peace, Rock, Wrist 90, Wrist 180) | Demonstrates full articulation |
+| `z` | Homes all servos (Fingers: 0 deg open, Wrist: 90 deg straight) | **Mandatory before mounting pulleys & gears** |
+| `p` | Cycles through preset poses (Open, Fist, Point, Peace, Wrist Left, Wrist Right, etc.) | Demonstrates full articulation |
 | `scan` | Runs live I2C bus scanner | Verifies SDA/SCL wiring if board isn't found |
 | `status` | Prints live angles and calibrated pulse limits table for all 6 channels | Verification diagnostic |
 | `trim <min> <max>` | Sets custom 12-bit pulse limits (e.g. `trim 104 508`) | Calibrates endstops and eliminates hum |
@@ -144,7 +149,9 @@ When the sketch boots, it will automatically check for the PCA9685 at address `0
 
 1. **Multimeter Check**: Verify `OUT+` on the SZBK07 is measuring 6.00V DC.
 2. **Flash the Sketch**: Upload and open the Serial Monitor at 115200 baud.
-3. **Verify Zeroing (`z`)**: Run `z`. All 6 servo shafts will rotate to their 0-degree home position (open hand, wrist neutral).
-4. **Mount Pulleys & Wrist Gears**: With power active and servos holding at 0 degrees, press the yellow `ServoPulleyHitecV5_tighter.stl` winches and the wrist drive gear (`WristGearsV4.stl`) onto their 25T splines.
+3. **Verify Homing (`z`)**: Send `z`. Fingers (0-4) rotate to 0 degrees (open hand) and Wrist (5) rotates to 90 degrees (straight neutral).
+4. **Mount Pulleys & Wrist Gears**: With power active and servos actively holding their positions:
+   - Press the yellow `ServoPulleyHitecV5_tighter.stl` winches onto finger servos 0-4 with string tie holes aligned straight toward the forearm.
+   - Press the wrist drive gear (`WristGearsV4.stl`) onto servo 5 with the hand and forearm mechanically aligned straight ahead (90 deg neutral).
 5. **Individual Sweep (`0`, then `s`, `1`, then `s`... `5`, then `s`)**: Test each finger and the wrist rotation one by one. Check that lines wind cleanly and the wrist ring rotates smoothly without tooth skipping.
 6. **Stress Test (`w`)**: Sweep all 6 servos together. Place your multimeter across `OUT+` and `OUT-` on the SZBK07. The voltage should remain between $5.90\text{V}$ and $6.05\text{V}$ without resetting the ESP32.
