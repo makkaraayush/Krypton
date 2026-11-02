@@ -15,35 +15,48 @@
 #define PCA9685_I2C_ADDR    0x40    // Default address with all address solder pads open
 #define PWM_FREQUENCY       50      // 50Hz for analog/digital hobby servos (20ms cycle)
 
-// PCA9685 Channel Mapping (5 MG996R Servos)
+// PCA9685 Channel Mapping (6 MG996R Servos: 5 Fingers + Wrist)
 #define CH_THUMB            0
 #define CH_INDEX            1
 #define CH_MIDDLE           2
 #define CH_RING             3
 #define CH_PINKY            4
+#define CH_WRIST            5
 
-#define NUM_SERVOS          5
+#define NUM_SERVOS          6
 
 // Pulse Width Calibration (12-bit timer: 0 to 4095 ticks at 50Hz / 20ms period)
-// 102 ticks ~= 500 us (0 degrees)
-// 512 ticks ~= 2500 us (180 degrees)
-// Per-finger pulse trims allow fine mechanical zero calibration without re-seating servo horns:
-// 102 ticks ~= 500 us (0 degrees / open)
-// 540 ticks ~= 2500-2636 us (180 degrees / full tight grip on MG996R)
-// Note: 505-512 ticks only delivers ~160 degrees on real PCA9685 clocks (~26.5MHz), causing loose fingers.
-const uint16_t SERVO_PULSE_MIN_MAP[NUM_SERVOS] = { 102, 102, 102, 102, 102 }; // Thumb, Index, Middle, Ring, Pinky
-const uint16_t SERVO_PULSE_MAX_MAP[NUM_SERVOS] = { 540, 540, 540, 540, 540 };
+// 102 ticks ~= 500 us (0 degrees / fully open / wrist left)
+// 540-550 ticks ~= 2500-2650 us (180 degrees / full tight grip on MG996R)
+// Calibrated per finger:
+//   Index  (CH 1): 550 (+10 ticks for full tight curl)
+//   Middle (CH 2): 545 (+5 ticks for full tight curl)
+const uint16_t SERVO_PULSE_MIN_MAP[NUM_SERVOS] = { 102, 102, 102, 102, 102, 102 }; // Thumb, Index, Mid, Ring, Pinky, Wrist
+const uint16_t SERVO_PULSE_MAX_MAP[NUM_SERVOS] = { 540, 550, 545, 540, 540, 540 };
 
 // Legacy single-value fallback constants
 #define SERVO_PULSE_MIN     102
 #define SERVO_PULSE_MAX     540
 
-// Per-finger angle limits (degrees: 0 = fully extended open, 180 = fully contracted fist)
-const int SERVO_MIN_ANGLES[NUM_SERVOS] = { 0,   0,   0,   0,   0   };
-const int SERVO_MAX_ANGLES[NUM_SERVOS] = { 180, 180, 180, 180, 180 };
+// Per-channel angle limits (degrees: 0 to 180)
+const int SERVO_MIN_ANGLES[NUM_SERVOS] = { 0,   0,   0,   0,   0,   0   };
+const int SERVO_MAX_ANGLES[NUM_SERVOS] = { 180, 180, 180, 180, 180, 180 };
+
+// Default home positions on boot / reset (Fingers = 0 deg open, Wrist = 90 deg straight)
+const float SERVO_HOME_ANGLES[NUM_SERVOS] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 90.0f };
 
 // Direction Inversion (Set true if spool rotation tightens tendon in reverse direction)
-const bool SERVO_INVERT[NUM_SERVOS]    = { false, false, false, false, false };
+const bool SERVO_INVERT[NUM_SERVOS]    = { false, false, false, false, false, false };
+
+// ==========================================
+// Wrist Rotation Tendon Decoupling Compensation
+// ==========================================
+// As the wrist rotates away from 90 deg, tendons routing around the rotating collar
+// shift path length. Rotating left (<90) tightens outer fingers (especially Pinky/Ring).
+// Positive coefficient: finger tightens on left rotation (wrist < 90), so servo relaxes angle.
+// Formula: hw_angle[i] = target_angle[i] + (WRIST_COMP_COEFFS[i] * (wrist_angle - 90.0f))
+#define ENABLE_WRIST_COMPENSATION true
+const float WRIST_COMP_COEFFS[5] = { -0.10f, -0.05f, 0.00f, 0.08f, 0.15f }; // Thumb, Index, Middle, Ring, Pinky
 
 // ==========================================
 // Network & Telemetry Settings

@@ -2,7 +2,7 @@
 """
 Krypton Standalone Servo & Tendon Test Utility
 Allows direct hardware angle verification over Serial USB or Wi-Fi UDP
-without running the MediaPipe camera pipeline.
+without running the MediaPipe camera pipeline. Supports 6 channels (5 Fingers + Wrist).
 """
 
 import sys
@@ -18,15 +18,18 @@ except ImportError:
     HAS_SERIAL = False
 
 
-FINGER_NAMES = ["Thumb", "Index", "Middle", "Ring", "Pinky"]
+FINGER_NAMES = ["Thumb", "Index", "Middle", "Ring", "Pinky", "Wrist"]
 
 PRESET_POSES = {
-    "open": [0.0, 0.0, 0.0, 0.0, 0.0],
-    "fist": [180.0, 180.0, 180.0, 180.0, 180.0],
-    "point": [180.0, 0.0, 180.0, 180.0, 180.0],
-    "peace": [180.0, 0.0, 0.0, 180.0, 180.0],
-    "thumbs_up": [0.0, 180.0, 180.0, 180.0, 180.0],
-    "rock": [0.0, 0.0, 180.0, 180.0, 0.0]
+    "open": [0.0, 0.0, 0.0, 0.0, 0.0, 90.0],
+    "fist": [180.0, 180.0, 180.0, 180.0, 180.0, 90.0],
+    "point": [180.0, 0.0, 180.0, 180.0, 180.0, 90.0],
+    "peace": [180.0, 0.0, 0.0, 180.0, 180.0, 90.0],
+    "thumbs_up": [0.0, 180.0, 180.0, 180.0, 180.0, 90.0],
+    "rock": [0.0, 0.0, 180.0, 180.0, 0.0, 90.0],
+    "wrist_left": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "wrist_center": [0.0, 0.0, 0.0, 0.0, 0.0, 90.0],
+    "wrist_right": [0.0, 0.0, 0.0, 0.0, 0.0, 180.0],
 }
 
 
@@ -46,7 +49,7 @@ def main():
     parser.add_argument("--udp-port", type=int, default=8888, help="UDP port (default: 8888)")
     parser.add_argument("--port", default=None, help="Serial COM port (default: auto-detect)")
     parser.add_argument("--baud", type=int, default=115200, help="Serial baud rate")
-    parser.add_argument("--channel", type=int, choices=range(0, 5), default=None, help="Single channel to test (0:Thumb - 4:Pinky)")
+    parser.add_argument("--channel", type=int, choices=range(0, 6), default=None, help="Single channel to test (0:Thumb - 5:Wrist)")
     parser.add_argument("--angle", type=float, default=90.0, help="Target angle for single channel (0 to 180 deg)")
     parser.add_argument("--pose", choices=list(PRESET_POSES.keys()), default=None, help="Send preset pose")
     parser.add_argument("--sweep", action="store_true", help="Run 0-to-180 smooth test sweep across all fingers")
@@ -86,28 +89,28 @@ def main():
     try:
         if args.pose:
             angles = PRESET_POSES[args.pose]
-            payload = f"T:{angles[0]:.1f},I:{angles[1]:.1f},M:{angles[2]:.1f},R:{angles[3]:.1f},P:{angles[4]:.1f}\n"
+            payload = f"T:{angles[0]:.1f},I:{angles[1]:.1f},M:{angles[2]:.1f},R:{angles[3]:.1f},P:{angles[4]:.1f},W:{angles[5]:.1f}\n"
             print(f"[*] Sending pose [{args.pose.upper()}]: {angles}")
             send_payload(payload, args.mode, args.ip, args.udp_port, ser_obj)
 
         elif args.sweep:
             print("[*] Starting sweep: 0 -> 180 -> 0 degrees...")
             for ang in range(0, 185, int(args.step)):
-                payload = f"T:{ang:.1f},I:{ang:.1f},M:{ang:.1f},R:{ang:.1f},P:{ang:.1f}\n"
+                payload = f"T:{ang:.1f},I:{ang:.1f},M:{ang:.1f},R:{ang:.1f},P:{ang:.1f},W:90.0\n"
                 send_payload(payload, args.mode, args.ip, args.udp_port, ser_obj)
                 time.sleep(0.04)
             time.sleep(0.5)
             for ang in range(180, -5, -int(args.step)):
-                payload = f"T:{ang:.1f},I:{ang:.1f},M:{ang:.1f},R:{ang:.1f},P:{ang:.1f}\n"
+                payload = f"T:{ang:.1f},I:{ang:.1f},M:{ang:.1f},R:{ang:.1f},P:{ang:.1f},W:90.0\n"
                 send_payload(payload, args.mode, args.ip, args.udp_port, ser_obj)
                 time.sleep(0.04)
             print("[*] Sweep complete.")
 
         elif args.channel is not None:
             name = FINGER_NAMES[args.channel]
-            angles = [0.0] * 5
+            angles = [0.0, 0.0, 0.0, 0.0, 0.0, 90.0]
             angles[args.channel] = max(0.0, min(args.angle, 180.0))
-            payload = f"T:{angles[0]:.1f},I:{angles[1]:.1f},M:{angles[2]:.1f},R:{angles[3]:.1f},P:{angles[4]:.1f}\n"
+            payload = f"T:{angles[0]:.1f},I:{angles[1]:.1f},M:{angles[2]:.1f},R:{angles[3]:.1f},P:{angles[4]:.1f},W:{angles[5]:.1f}\n"
             print(f"[*] Setting {name} (CH {args.channel}) to {angles[args.channel]} deg")
             send_payload(payload, args.mode, args.ip, args.udp_port, ser_obj)
 

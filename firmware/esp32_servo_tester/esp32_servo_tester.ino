@@ -3,15 +3,15 @@
  * 
  * Purpose:
  * Bench testing, electrical zeroing, tendon tension checking, wrist rotation testing,
- * and pulse trimming for TowerPro MG996R servos via PCA9685 I2C driver (or direct GPIO).
+ * wrist-tendon decoupling compensation, and pulse trimming for TowerPro MG996R servos.
  * 
  * Channels:
- * - CH 0: Thumb     (0 = Open, 180 = Clenched)
- * - CH 1: Index     (0 = Open, 180 = Clenched)
- * - CH 2: Middle    (0 = Open, 180 = Clenched)
- * - CH 3: Ring      (0 = Open, 180 = Clenched)
- * - CH 4: Pinky     (0 = Open, 180 = Clenched)
- * - CH 5: Wrist     (90 = Straight/Neutral, 0 = Left, 180 = Right)
+ * - CH 0: Thumb     (0 = Open, 180 = Clenched, Pulse: 102 - 540)
+ * - CH 1: Index     (0 = Open, 180 = Clenched, Pulse: 102 - 550 [+10 ticks calibrated])
+ * - CH 2: Middle    (0 = Open, 180 = Clenched, Pulse: 102 - 545 [+5 ticks calibrated])
+ * - CH 3: Ring      (0 = Open, 180 = Clenched, Pulse: 102 - 540)
+ * - CH 4: Pinky     (0 = Open, 180 = Clenched, Pulse: 102 - 540)
+ * - CH 5: Wrist     (90 = Straight/Neutral, 0 = Left, 180 = Right, Pulse: 102 - 540)
  * 
  * Hardware:
  * - ESP32 Type-C CP2102 (SDA = GPIO 21, SCL = GPIO 22)
@@ -48,16 +48,30 @@ const char* FINGER_NAMES[NUM_SERVOS] = { "Thumb", "Index", "Middle", "Ring", "Pi
 #define SERVO_NAMES         FINGER_NAMES
 
 // Calibrated 12-bit PWM Ticks (0-4095 at 50Hz)
-// 102 ticks ~= 500 us (0 degrees / fully open / wrist left)
-// 540 ticks ~= 2500-2600 us (180 degrees / full tight fist / wrist right)
-// Note: MG996R requires ~540 ticks on PCA9685 to reach true 180 physical degrees.
-// Ticks lower than 520 (e.g. 505-512) stop at ~160 degrees, leaving tendons loose!
+// 102 ticks ~= 500 us (0 degrees)
+// 540 ticks ~= 2500-2636 us (180 degrees / full tight grip)
+// Per-finger custom calibration:
+//   Index  (CH 1): 550 (+10 ticks for full tight curl)
+//   Middle (CH 2): 545 (+5 ticks for full tight curl)
 uint16_t pulseMin[NUM_SERVOS] = { 102, 102, 102, 102, 102, 102 };
-uint16_t pulseMax[NUM_SERVOS] = { 540, 540, 540, 540, 540, 540 };
+uint16_t pulseMax[NUM_SERVOS] = { 540, 550, 545, 540, 540, 540 };
 
-// Current angles (Fingers default to 0 deg open, Wrist defaults to 90 deg straight)
+// Current user commanded target angles
+// Fingers default to 0 deg (open), Wrist defaults to 90 deg (straight)
 float currentAngles[NUM_SERVOS] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 90.0f };
 int activeChannel = 0; // Currently selected servo (0 to 5)
+
+// ==========================================
+// Wrist Rotation Tendon Decoupling Compensation
+// ==========================================
+// As the wrist rotates away from 90 deg, tendons routing around the rotating collar
+// change path length. Rotating left (<90) tightens outer fingers (especially Pinky/Ring).
+// Compensation formula:
+//   delta_wrist = currentAngles[5] - 90.0 deg
+//   hw_angle[i] = target_angle[i] + (wristCompCoeffs[i] * delta_wrist)
+// When rotating left (delta < 0), a positive coeff relaxes the servo to cancel phantom tension.
+bool wristCompensationEnabled = true;
+float wristCompCoeffs[5] = { -0.10f, -0.05f, 0.00f, 0.08f, 0.15f }; // Thumb, Index, Middle, Ring, Pinky
 
 // Optional Single Servo Direct GPIO Test Pin (if testing without PCA9685)
 #define DIRECT_GPIO_PIN     18
@@ -110,7 +124,6 @@ void setPWMFreq(float freq) {
 bool initPCA9685() {
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_CLOCK_SPEED);
 
-    // Verify presence
     Wire.beginTransmission(PCA9685_ADDR);
     if (Wire.endTransmission() != 0) {
         return false;
@@ -125,16 +138,34 @@ bool initPCA9685() {
     return true;
 }
 
-void writeAngleHardware(uint8_t channel, float angle) {
+// Forward declaration
+void writeAngleHardware(uint8_t channel, float angle, bool updateDependents = true);
+
+void writeAngleHardware(uint8_t channel, float angle, bool updateDependents) {
     if (channel >= NUM_SERVOS) return;
-    angle = constrain(angle, 0.0f, 200.0f); // Allow up to 200 deg for testing extra tendon pull
+    angle = constrain(angle, 0.0f, 200.0f);
     currentAngles[channel] = angle;
+
+    float effectiveAngle = angle;
+    // Apply wrist decoupling compensation to fingers (CH 0-4)
+    if (channel < 5 && wristCompensationEnabled) {
+        float deltaWrist = currentAngles[5] - 90.0f;
+        effectiveAngle += wristCompCoeffs[channel] * deltaWrist;
+        effectiveAngle = constrain(effectiveAngle, 0.0f, 200.0f);
+    }
 
     uint16_t pMin = pulseMin[channel];
     uint16_t pMax = pulseMax[channel];
-    uint16_t pulse = (uint16_t)map((long)(angle * 10.0f), 0, 1800, pMin, pMax);
-    pulse = constrain(pulse, (uint16_t)70, (uint16_t)650); // Safety clamp
+    uint16_t pulse = (uint16_t)map((long)(effectiveAngle * 10.0f), 0, 1800, pMin, pMax);
+    pulse = constrain(pulse, (uint16_t)70, (uint16_t)650);
     setPWM(channel, 0, pulse);
+
+    // If wrist moved, update all fingers so tension stays decoupled
+    if (channel == 5 && updateDependents && wristCompensationEnabled) {
+        for (int ch = 0; ch < 5; ch++) {
+            writeAngleHardware(ch, currentAngles[ch], false);
+        }
+    }
 }
 
 void initDirectGPIOServo() {
@@ -190,15 +221,15 @@ void scanI2CBus() {
 // Test Routines
 // ==========================================
 void zeroAllServos() {
-    Serial.println("\n[*] HOMING/ZEROING ALL 6 SERVOS TO DEFAULT POSITIONS...");
+    Serial.println("\n[*] HOMING ALL 6 SERVOS TO DEFAULT POSITIONS...");
     Serial.println("  -> Fingers (CH 0-4) -> 0 deg (Open Hand)");
     Serial.println("  -> Wrist   (CH 5)   -> 90 deg (Straight / Neutral Center)");
     for (int i = 0; i < 5; i++) {
-        writeAngleHardware(i, 0.0f);
-        delay(80);
+        writeAngleHardware(i, 0.0f, false);
+        delay(70);
     }
-    writeAngleHardware(5, 90.0f);
-    delay(80);
+    writeAngleHardware(5, 90.0f, true);
+    delay(70);
     Serial.println("[*] Done. Fingers at 0 deg, Wrist holding straight at 90 deg.");
     Serial.println("[!] Safe to mount pulleys and align wrist drive gears now.");
 }
@@ -207,7 +238,6 @@ void sweepChannel(int ch, int delayMs = 15) {
     if (ch < 0 || ch >= NUM_SERVOS) return;
 
     if (ch == 5) {
-        // Wrist sweep: Straight (90) -> Left (0) -> Right (180) -> Straight (90)
         Serial.println("\n[*] Sweeping Wrist (CH 5): Straight(90) -> Left(0) -> Right(180) -> Straight(90)...");
         for (int a = 90; a >= 0; a -= 2) {
             writeAngleHardware(5, a);
@@ -227,7 +257,6 @@ void sweepChannel(int ch, int delayMs = 15) {
         return;
     }
 
-    // Fingers sweep: 0 -> 180 -> 0 deg
     Serial.printf("\n[*] Sweeping %s (CH %d): 0 -> 180 -> 0 deg...\n", FINGER_NAMES[ch], ch);
     for (int a = 0; a <= 180; a += 2) {
         writeAngleHardware(ch, a);
@@ -241,89 +270,118 @@ void sweepChannel(int ch, int delayMs = 15) {
     Serial.printf("[*] %s sweep complete.\n", FINGER_NAMES[ch]);
 }
 
-void sweepAllSimultaneous(int delayMs = 20) {
-    Serial.println("\n[*] STRESS TEST: Sweeping all 6 servos simultaneously...");
-    Serial.println("[*] Watch multimeter: SZBK07 buck output should stay rock-solid at 6.00V.");
-
+// 1. Sweep JUST the 5 fingers (CH 0-4) simultaneously while wrist stays at 90 deg
+void sweepFingers(int delayMs = 20) {
+    Serial.println("\n[*] SWEEPING 5 FINGERS TOGETHER (0 -> 180 -> 0)... [Wrist stays at 90°]");
     for (int a = 0; a <= 180; a += 2) {
         for (int ch = 0; ch < 5; ch++) {
-            writeAngleHardware(ch, a);
+            writeAngleHardware(ch, a, false);
         }
-        writeAngleHardware(5, a); // Wrist sweeps along 0 -> 180
         delay(delayMs);
     }
     delay(400);
     for (int a = 180; a >= 0; a -= 2) {
         for (int ch = 0; ch < 5; ch++) {
-            writeAngleHardware(ch, a);
+            writeAngleHardware(ch, a, false);
         }
-        writeAngleHardware(5, a); // Wrist sweeps along 180 -> 0
         delay(delayMs);
     }
-    // Return wrist to straight neutral
-    writeAngleHardware(5, 90.0f);
+    Serial.println("[*] Fingers sweep complete. All 5 fingers open at 0 deg.");
+}
+
+// 2. Stress test: sweep ALL 6 servos together (fingers + wrist)
+void sweepAllSimultaneous(int delayMs = 20) {
+    Serial.println("\n[*] STRESS TEST: Sweeping ALL 6 servos simultaneously (5 fingers + wrist)...");
+    Serial.println("[*] Watch multimeter: SZBK07 buck output should stay rock-solid at 6.00V.");
+
+    for (int a = 0; a <= 180; a += 2) {
+        for (int ch = 0; ch < 5; ch++) {
+            writeAngleHardware(ch, a, false);
+        }
+        writeAngleHardware(5, a, false); // Wrist sweeps along 0 -> 180
+        delay(delayMs);
+    }
+    delay(400);
+    for (int a = 180; a >= 0; a -= 2) {
+        for (int ch = 0; ch < 5; ch++) {
+            writeAngleHardware(ch, a, false);
+        }
+        writeAngleHardware(5, a, false); // Wrist sweeps along 180 -> 0
+        delay(delayMs);
+    }
+    writeAngleHardware(5, 90.0f, true); // Return wrist to straight neutral
     delay(150);
-    Serial.println("[*] Simultaneous sweep complete. Fingers at 0 deg, Wrist back at straight neutral (90 deg).");
+    Serial.println("[*] Simultaneous 6-servo sweep complete. Fingers at 0 deg, Wrist at 90 deg.");
 }
 
 void applyPose(const char* name, float t, float i, float m, float r, float p, float w = 90.0f) {
     Serial.printf("\n[*] Applying Pose [%s]: T:%.0f I:%.0f M:%.0f R:%.0f P:%.0f W:%.0f\n", name, t, i, m, r, p, w);
-    writeAngleHardware(0, t);
-    writeAngleHardware(1, i);
-    writeAngleHardware(2, m);
-    writeAngleHardware(3, r);
-    writeAngleHardware(4, p);
-    writeAngleHardware(5, w);
+    writeAngleHardware(5, w, false);
+    writeAngleHardware(0, t, false);
+    writeAngleHardware(1, i, false);
+    writeAngleHardware(2, m, false);
+    writeAngleHardware(3, r, false);
+    writeAngleHardware(4, p, false);
 }
 
 void printStatus() {
-    Serial.println("\n=========================================================================");
-    Serial.println("                    KRYPTON SERVO TESTER - STATUS                        ");
-    Serial.println("=========================================================================");
-    Serial.printf("Active Selected Channel: %d (%s)\n", activeChannel, FINGER_NAMES[activeChannel]);
-    Serial.println("Current Positions, Home Angles & 12-bit Pulse Calibration:");
-    Serial.println(" CH | Joint/Name | Angle (deg) | Neutral/Home | PulseMin (0°) | PulseMax (180°) | Approx Max us");
-    Serial.println("----+------------+-------------+--------------+---------------+-----------------+--------------");
+    Serial.println("\n=========================================================================================");
+    Serial.println("                              KRYPTON SERVO TESTER - STATUS                              ");
+    Serial.println("=========================================================================================");
+    Serial.printf("Active Channel: %d (%s) | Wrist Tension Compensation: [%s]\n",
+                  activeChannel, FINGER_NAMES[activeChannel], wristCompensationEnabled ? "ENABLED" : "DISABLED");
+    Serial.println("Current Positions, Home Angles, 12-bit Pulse Calibration & Decoupling Coeffs:");
+    Serial.println(" CH | Joint/Name | Angle (deg) | Home / Neutral | PulseMin | PulseMax | Approx Max us | Wrist Comp");
+    Serial.println("----+------------+-------------+----------------+----------+----------+---------------+-----------");
     for (int i = 0; i < NUM_SERVOS; i++) {
         const char* homeLabel = (i == 5) ? " 90 deg (Mid)" : "  0 deg (Open)";
         uint16_t usMax = (uint16_t)(pulseMax[i] * 4.8828f);
-        Serial.printf("  %d | %-10s |  %5.1f deg   | %-12s |      %3d      |       %3d       |   ~%4d us %s\n",
-                      i, FINGER_NAMES[i], currentAngles[i], homeLabel, pulseMin[i], pulseMax[i], usMax,
+        char compStr[16];
+        if (i < 5) snprintf(compStr, sizeof(compStr), "%+.2f", wristCompCoeffs[i]);
+        else snprintf(compStr, sizeof(compStr), " [Driver]");
+
+        Serial.printf("  %d | %-10s |  %5.1f deg   | %-14s |   %3d    |   %3d    |   ~%4d us     |  %s %s\n",
+                      i, FINGER_NAMES[i], currentAngles[i], homeLabel, pulseMin[i], pulseMax[i], usMax, compStr,
                       (i == activeChannel) ? "<-- [ACTIVE]" : "");
     }
-    Serial.println("=========================================================================");
-    Serial.println("[TIP] If any finger is loose at 180 deg, type '+' or 'max 550' to tighten!");
-    Serial.println("[TIP] If any servo hums or buzzes, type '-' or 'max 530' to back off.");
-    Serial.println("=========================================================================");
+    Serial.println("=========================================================================================");
+    Serial.printf("Wrist Delta from Neutral: %+.1f deg (Affects finger string path length)\n", currentAngles[5] - 90.0f);
+    Serial.println("[TIP] Type 'w' to sweep just fingers. Type 'wa' to sweep all 6 together.");
+    Serial.println("[TIP] Type '+' or 'max 555' to tighten loose fingers. Type 'comp on/off' to toggle decoupling.");
+    Serial.println("=========================================================================================");
 }
 
 void printMenu() {
-    Serial.println("\n-------------------------------------------------------------------------");
-    Serial.println("                           AVAILABLE COMMANDS                            ");
-    Serial.println("-------------------------------------------------------------------------");
+    Serial.println("\n-----------------------------------------------------------------------------------------");
+    Serial.println("                                  AVAILABLE COMMANDS                                     ");
+    Serial.println("-----------------------------------------------------------------------------------------");
     Serial.println("  0 - 5        : Select active channel (0:Thumb, 1:Idx, 2:Mid, 3:Ring, 4:Pinky, 5:Wrist)");
-    Serial.println("  <angle>      : Move active channel to angle 0-200 (e.g. '0', '90', '180', '190')");
-    Serial.println("  <ch> <angle> : Move specified channel directly (e.g. '4 180', 'wrist 90')");
+    Serial.println("  <angle>      : Move active channel to angle 0-200 (e.g. '0', '90', '180')");
+    Serial.println("  <ch> <angle> : Move specified channel directly (e.g. '1 180', 'wrist 90')");
     Serial.println("  all <angle>  : Move ALL 6 channels to angle (e.g. 'all 180', 'all 0')");
     Serial.println("  center / c   : Move wrist to straight neutral (90 deg)");
     Serial.println("  left / l     : Rotate wrist left (0 deg)");
     Serial.println("  right / r    : Rotate wrist right (180 deg)");
     Serial.println("  s            : Sweep active channel (Fingers: 0->180->0, Wrist: 90->0->180->90)");
-    Serial.println("  w            : Stress test: sweep ALL 6 servos together");
+    Serial.println("  w  or wf     : SWEEP 5 FINGERS ONLY (Wrist holds steady at 90 deg neutral)");
+    Serial.println("  wa or wall   : STRESS TEST: SWEEP ALL 6 SERVOS TOGETHER (5 fingers + wrist)");
     Serial.println("  z            : Home/Zero (Fingers -> 0 deg, Wrist -> 90 deg straight)");
     Serial.println("  p            : Cycle through preset poses (Fist, Peace, Wrist L/R, etc.)");
-    Serial.println("  +  or +5     : TIGHTEN: Increase pulseMax by 5 ticks (tightens loose finger)");
+    Serial.println("  +  or +5     : TIGHTEN: Increase pulseMax by 5 ticks (tightens loose finger at 180)");
     Serial.println("  -  or -5     : RELIEVE: Decrease pulseMax by 5 ticks (stops motor buzz/hum)");
-    Serial.println("  +10 / -10    : Increase / decrease pulseMax by 10 ticks");
-    Serial.println("  max <ticks>  : Set max pulse ticks for active channel (e.g. 'max 550', 'max 560')");
+    Serial.println("  +10 / -10    : Adjust active finger pulseMax by 10 ticks");
+    Serial.println("  max <ticks>  : Set max pulse ticks for active channel (e.g. 'max 555')");
     Serial.println("  min <ticks>  : Set min pulse ticks for active channel (e.g. 'min 102')");
     Serial.println("  pulse <ticks>: Send raw PWM ticks directly to servo (e.g. 'pulse 545')");
     Serial.println("  trim <min> <max> : Set both pulse limits for active channel (e.g. 'trim 102 550')");
+    Serial.println("  comp         : View wrist decoupling compensation coefficients");
+    Serial.println("  comp on/off  : Enable or disable automatic wrist-tendon tension compensation");
+    Serial.println("  comp <ch> <k>: Set decoupling factor for finger (e.g. 'comp 4 0.15' or 'comp pinky 0.18')");
     Serial.println("  scan         : Re-run I2C bus scanner");
-    Serial.println("  status       : Print live angles and calibrated pulse limits table");
+    Serial.println("  status       : Print live angles, pulse limits, and compensation table");
     Serial.println("  gpio <angle> : Test direct ESP32 GPIO 18 (without PCA9685)");
     Serial.println("  ? or help    : Show this help menu");
-    Serial.println("-------------------------------------------------------------------------");
+    Serial.println("-----------------------------------------------------------------------------------------");
 }
 
 // ==========================================
@@ -359,7 +417,10 @@ void processCommand(String cmd) {
         zeroAllServos();
     } else if (cmd.equalsIgnoreCase("s") || cmd.equalsIgnoreCase("sweep")) {
         sweepChannel(activeChannel);
-    } else if (cmd.equalsIgnoreCase("w") || cmd.equalsIgnoreCase("stress") || cmd.equalsIgnoreCase("sweepall")) {
+    // User requested: "1 command that will just use 'w' cycle for just fingers, and the 1 which we have rn for all together"
+    } else if (cmd.equalsIgnoreCase("w") || cmd.equalsIgnoreCase("wf") || cmd.equalsIgnoreCase("fingers") || cmd.equalsIgnoreCase("sweepfingers")) {
+        sweepFingers();
+    } else if (cmd.equalsIgnoreCase("wa") || cmd.equalsIgnoreCase("wall") || cmd.equalsIgnoreCase("alltogether") || cmd.equalsIgnoreCase("stress") || cmd.equalsIgnoreCase("sweepall")) {
         sweepAllSimultaneous();
     } else if (cmd.equalsIgnoreCase("p") || cmd.equalsIgnoreCase("pose")) {
         cyclePose();
@@ -372,6 +433,46 @@ void processCommand(String cmd) {
     } else if (cmd.equalsIgnoreCase("right") || cmd.equalsIgnoreCase("r")) {
         writeAngleHardware(5, 180.0f);
         Serial.println("[*] Wrist moved to 180.0 deg (Right Rotation).");
+    } else if (cmd.equalsIgnoreCase("comp on")) {
+        wristCompensationEnabled = true;
+        Serial.println("[*] Wrist Tension Decoupling Compensation: ENABLED.");
+        writeAngleHardware(5, currentAngles[5]); // Refresh finger offsets
+    } else if (cmd.equalsIgnoreCase("comp off")) {
+        wristCompensationEnabled = false;
+        Serial.println("[*] Wrist Tension Decoupling Compensation: DISABLED.");
+        for (int i = 0; i < 5; i++) writeAngleHardware(i, currentAngles[i], false);
+    } else if (cmd.equalsIgnoreCase("comp")) {
+        Serial.println("\n[*] Current Wrist-Tendon Compensation Coefficients:");
+        for (int i = 0; i < 5; i++) {
+            Serial.printf("  CH %d (%-7s): %+.2f\n", i, FINGER_NAMES[i], wristCompCoeffs[i]);
+        }
+        Serial.printf("Status: %s (Wrist Delta: %+.1f deg)\n",
+                      wristCompensationEnabled ? "ENABLED" : "DISABLED", currentAngles[5] - 90.0f);
+    } else if (cmd.startsWith("comp ") || cmd.startsWith("COMP ")) {
+        // Syntax: comp <channel/name> <coeff> (e.g. 'comp 4 0.18' or 'comp pinky 0.15')
+        int firstSpace = cmd.indexOf(' ');
+        int secondSpace = cmd.indexOf(' ', firstSpace + 1);
+        if (secondSpace != -1) {
+            String chStr = cmd.substring(firstSpace + 1, secondSpace);
+            float k = cmd.substring(secondSpace + 1).toFloat();
+            int ch = -1;
+            if (chStr.length() == 1 && chStr[0] >= '0' && chStr[0] <= '4') ch = chStr[0] - '0';
+            else if (chStr.equalsIgnoreCase("thumb")) ch = 0;
+            else if (chStr.equalsIgnoreCase("index")) ch = 1;
+            else if (chStr.equalsIgnoreCase("middle") || chStr.equalsIgnoreCase("mid")) ch = 2;
+            else if (chStr.equalsIgnoreCase("ring")) ch = 3;
+            else if (chStr.equalsIgnoreCase("pinky")) ch = 4;
+
+            if (ch >= 0 && ch < 5) {
+                wristCompCoeffs[ch] = k;
+                Serial.printf("[*] Updated %s (CH %d) wrist compensation coeff -> %+.3f\n", FINGER_NAMES[ch], ch, k);
+                writeAngleHardware(5, currentAngles[5]); // Refresh
+            } else {
+                Serial.println("[ERROR] Invalid finger channel. Choose 0 to 4 (Thumb to Pinky).");
+            }
+        } else {
+            Serial.println("[ERROR] Syntax: comp <channel> <coeff> (e.g. 'comp 4 0.15' or 'comp pinky 0.18')");
+        }
     } else if (cmd == "+" || cmd == "+5") {
         pulseMax[activeChannel] = min((int)pulseMax[activeChannel] + 5, 650);
         Serial.printf("[*] %s (CH %d) pulseMax tightened -> %d ticks (~%d us)\n",
@@ -452,7 +553,7 @@ void processCommand(String cmd) {
         ang = constrain(ang, 0.0f, 200.0f);
         Serial.printf("[*] Moving ALL 6 channels to %.1f deg\n", ang);
         for (int i = 0; i < NUM_SERVOS; i++) {
-            writeAngleHardware(i, ang);
+            writeAngleHardware(i, ang, false);
         }
     } else if (cmd.startsWith("trim ") || cmd.startsWith("TRIM ")) {
         int spaceIdx = cmd.indexOf(' ', 5);
@@ -469,7 +570,7 @@ void processCommand(String cmd) {
                 Serial.println("[ERROR] Invalid pulse range. Allowed: Min 60-200, Max 450-650.");
             }
         } else {
-            Serial.println("[ERROR] Syntax: trim <min> <max> (e.g. 'trim 102 545')");
+            Serial.println("[ERROR] Syntax: trim <min> <max> (e.g. 'trim 102 550')");
         }
     } else if (cmd.startsWith("gpio ") || cmd.startsWith("GPIO ")) {
         float ang = cmd.substring(5).toFloat();
@@ -480,7 +581,7 @@ void processCommand(String cmd) {
         setDirectGPIOServo(ang);
         Serial.printf("[*] Direct GPIO %d commanded to %.1f deg.\n", DIRECT_GPIO_PIN, ang);
     } else {
-        // Check for "<channel> <angle>" syntax (e.g. "5 90", "wrist 90", "4 180")
+        // Check for "<channel> <angle>" syntax (e.g. "5 90", "wrist 90", "1 180")
         int spaceIdx = cmd.indexOf(' ');
         if (spaceIdx != -1) {
             String chStr = cmd.substring(0, spaceIdx);
@@ -529,7 +630,8 @@ void setup() {
     Serial.println("=========================================================================");
     Serial.println("CH 0-4: Fingers (0=Open, 180=Tight Fist)");
     Serial.println("CH 5  : Wrist   (90=Straight Neutral, 0=Left, 180=Right)");
-    Serial.println("Default 180° Pulse Width: 540 ticks (~2636 us / full 180° rotation)");
+    Serial.println("Calibrated 180° Pulse Limits: Index=550 (+10), Middle=545 (+5)");
+    Serial.println("Wrist Tendon Decoupling: Active (Tension compensated across rotation)");
     Serial.println("Designed for 12V Battery + SZBK07 20A Buck + PCA9685");
 
     // Initialize I2C and check PCA9685

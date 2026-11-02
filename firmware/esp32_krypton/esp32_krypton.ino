@@ -45,7 +45,7 @@ void handleSetServos() {
         return;
     }
     String body = server.arg("plain");
-    // Parse simple JSON { "channel": 0, "angle": 90 } or { "t": 90, "i": 90... }
+    // Parse simple JSON { "channel": 0, "angle": 90 }
     int chIdx = body.indexOf("\"channel\":");
     int angIdx = body.indexOf("\"angle\":");
     if (chIdx != -1 && angIdx != -1) {
@@ -114,7 +114,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 // ==========================================
 // UDP Telemetry Listener (From Vision Script)
 // ==========================================
-// Expected packet: "T:45,I:90,M:120,R:120,P:120"
+// Expected packet: "T:45,I:90,M:120,R:120,P:120,W:90" (W is optional)
 unsigned long lastUDPPacketTime = 0;
 bool udpStreamingActive = false;
 #define UDP_TIMEOUT_MS 3000
@@ -129,7 +129,7 @@ void handleUDPTelemetry() {
             lastUDPPacketTime = millis();
             udpStreamingActive = true;
             
-            float angles[5] = { -1, -1, -1, -1, -1 };
+            float angles[NUM_SERVOS] = { -1, -1, -1, -1, -1, -1 };
             // Parse comma-delimited key:value pairs
             int start = 0;
             while (start < msg.length()) {
@@ -137,11 +137,12 @@ void handleUDPTelemetry() {
                 if (comma == -1) comma = msg.length();
                 String token = msg.substring(start, comma);
                 token.trim();
-                if (token.startsWith("T:")) angles[0] = token.substring(2).toFloat();
-                else if (token.startsWith("I:")) angles[1] = token.substring(2).toFloat();
-                else if (token.startsWith("M:")) angles[2] = token.substring(2).toFloat();
-                else if (token.startsWith("R:")) angles[3] = token.substring(2).toFloat();
-                else if (token.startsWith("P:")) angles[4] = token.substring(2).toFloat();
+                if (token.startsWith("T:")) angles[CH_THUMB] = token.substring(2).toFloat();
+                else if (token.startsWith("I:")) angles[CH_INDEX] = token.substring(2).toFloat();
+                else if (token.startsWith("M:")) angles[CH_MIDDLE] = token.substring(2).toFloat();
+                else if (token.startsWith("R:")) angles[CH_RING] = token.substring(2).toFloat();
+                else if (token.startsWith("P:")) angles[CH_PINKY] = token.substring(2).toFloat();
+                else if (token.startsWith("W:")) angles[CH_WRIST] = token.substring(2).toFloat();
                 start = comma + 1;
             }
 
@@ -178,7 +179,7 @@ void handleSerialCommands() {
                 Serial.println("ERR:UNKNOWN_POSE");
             }
         } else if (line.indexOf(':') != -1) {
-            // "T:90,I:120,M:120,R:120,P:120"
+            // "T:90,I:120,M:120,R:120,P:120,W:90"
             int start = 0;
             while (start < line.length()) {
                 int comma = line.indexOf(',', start);
@@ -190,6 +191,7 @@ void handleSerialCommands() {
                 else if (token.startsWith("M:")) pcaDriver.setServoAngle(CH_MIDDLE, token.substring(2).toFloat());
                 else if (token.startsWith("R:")) pcaDriver.setServoAngle(CH_RING, token.substring(2).toFloat());
                 else if (token.startsWith("P:")) pcaDriver.setServoAngle(CH_PINKY, token.substring(2).toFloat());
+                else if (token.startsWith("W:")) pcaDriver.setServoAngle(CH_WRIST, token.substring(2).toFloat());
                 start = comma + 1;
             }
             Serial.println("OK:ANGLES_UPDATED");
@@ -208,7 +210,7 @@ void setup() {
     // 1. Initialize PCA9685 PWM Driver
     Serial.print("[INIT] Connecting to PCA9685 on I2C (SDA=21, SCL=22)... ");
     if (pcaDriver.begin()) {
-        Serial.println("OK (0x40 @ 50Hz)");
+        Serial.println("OK (0x40 @ 50Hz, 6-Channel Ready)");
     } else {
         Serial.println("FAILED! Check wiring and 6V power.");
     }
@@ -238,7 +240,7 @@ void setup() {
     Serial.print("[UDP] Telemetry Receiver listening on port ");
     Serial.println(UDP_SERVER_PORT);
 
-    Serial.println("[READY] System initialized. Servos homed to 0 deg.");
+    Serial.println("[READY] System initialized. Fingers homed to 0 deg, Wrist to 90 deg.");
 }
 
 void loop() {

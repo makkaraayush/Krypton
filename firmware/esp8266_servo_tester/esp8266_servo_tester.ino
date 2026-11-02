@@ -55,7 +55,7 @@ const char* FINGER_NAMES[NUM_SERVOS] = { "Thumb", "Index", "Middle", "Ring", "Pi
 // 102 ticks ~= 500 us (0 degrees / fully open)
 // 512 ticks ~= 2500 us (180 degrees / clenched fist)
 uint16_t pulseMin[NUM_SERVOS] = { 102, 102, 102, 102, 102 };
-uint16_t pulseMax[NUM_SERVOS] = { 540, 540, 540, 540, 540 };
+uint16_t pulseMax[NUM_SERVOS] = { 540, 550, 545, 540, 540 };
 
 // Current angles
 float currentAngles[NUM_SERVOS] = { 0, 0, 0, 0, 0 };

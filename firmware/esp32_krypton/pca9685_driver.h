@@ -15,8 +15,8 @@ class PCA9685Driver {
 public:
     PCA9685Driver(uint8_t addr = PCA9685_I2C_ADDR) : _addr(addr) {
         for (int i = 0; i < NUM_SERVOS; i++) {
-            _current_angles[i] = 0.0f;
-            _target_angles[i] = 0.0f;
+            _current_angles[i] = SERVO_HOME_ANGLES[i];
+            _target_angles[i]  = SERVO_HOME_ANGLES[i];
         }
         _last_update_ms = 0;
     }
@@ -33,11 +33,12 @@ public:
 
         // Wake up oscillator & enable auto-increment
         writeRegister(PCA9685_MODE1, 0xA1);
+        writeRegister(PCA9685_MODE2, 0x04); // Totem-pole active drive (OUTDRV = 1)
         delay(5);
 
-        // Set default 0 degrees (open hand)
+        // Home all servos to default positions (Fingers -> 0 deg, Wrist -> 90 deg)
         for (int i = 0; i < NUM_SERVOS; i++) {
-            setServoAngle(i, 0.0f, true);
+            setServoAngle(i, SERVO_HOME_ANGLES[i], true);
         }
 
         return true;
@@ -56,7 +57,7 @@ public:
         writeRegister(PCA9685_PRESCALE, prescale);
         writeRegister(PCA9685_MODE1, oldmode);
         delay(5);
-        writeRegister(PCA9685_MODE1, oldmode | 0xa1); // Restart and auto-increment
+        writeRegister(PCA9685_MODE1, oldmode | 0xA1); // Restart and auto-increment
     }
 
     void setPWM(uint8_t channel, uint16_t on, uint16_t off) {
@@ -78,7 +79,7 @@ public:
         _target_angles[channel] = angle;
         if (immediate || !MOTION_SMOOTHING) {
             _current_angles[channel] = angle;
-            writeAngleHardware(channel, angle);
+            writeAngleHardware(channel, angle, true);
         }
     }
 
@@ -97,7 +98,7 @@ public:
                 } else {
                     _current_angles[i] += (diff > 0 ? TRAJECTORY_STEP_DEG : -TRAJECTORY_STEP_DEG);
                 }
-                writeAngleHardware(i, _current_angles[i]);
+                writeAngleHardware(i, _current_angles[i], true);
             }
         }
     }
@@ -118,18 +119,38 @@ private:
     float _target_angles[NUM_SERVOS];
     unsigned long _last_update_ms;
 
-    void writeAngleHardware(uint8_t channel, float angle) {
+    void writeAngleHardware(uint8_t channel, float angle, bool updateDependents = true) {
         if (channel >= NUM_SERVOS) return;
 
         if (SERVO_INVERT[channel]) {
             angle = 180.0f - angle;
         }
 
+        float effectiveAngle = angle;
+#if ENABLE_WRIST_COMPENSATION
+        // Decouple wrist rotation from finger tendon path length
+        if (channel < 5) {
+            float deltaWrist = _current_angles[CH_WRIST] - 90.0f;
+            effectiveAngle += WRIST_COMP_COEFFS[channel] * deltaWrist;
+            effectiveAngle = constrain(effectiveAngle, (float)SERVO_MIN_ANGLES[channel], (float)SERVO_MAX_ANGLES[channel]);
+        }
+#endif
+
         // Map degrees (0-180) to 12-bit PWM ticks using channel-specific calibrated pulse limits
         uint16_t minPulse = SERVO_PULSE_MIN_MAP[channel];
         uint16_t maxPulse = SERVO_PULSE_MAX_MAP[channel];
-        uint16_t pulse = (uint16_t)map((long)(angle * 10.0f), 0, 1800, minPulse, maxPulse);
+        uint16_t pulse = (uint16_t)map((long)(effectiveAngle * 10.0f), 0, 1800, minPulse, maxPulse);
+        pulse = constrain(pulse, (uint16_t)70, (uint16_t)650);
         setPWM(channel, 0, pulse);
+
+#if ENABLE_WRIST_COMPENSATION
+        // If wrist moved, update all fingers so tension stays decoupled in real time
+        if (channel == CH_WRIST && updateDependents) {
+            for (int i = 0; i < 5; i++) {
+                writeAngleHardware(i, _current_angles[i], false);
+            }
+        }
+#endif
     }
 
     void writeRegister(uint8_t reg, uint8_t val) {

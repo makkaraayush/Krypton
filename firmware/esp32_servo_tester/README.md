@@ -134,19 +134,23 @@ When the sketch boots, it will automatically check for the PCA9685 at address `0
 | `left` or `l` | Rotates wrist left (`0 deg`) | Quick wrist left |
 | `right` or `r` | Rotates wrist right (`180 deg`) | Quick wrist right |
 | `s` | Sweeps active channel smoothly (Fingers: 0->180->0, Wrist: 90->0->180->90) | Checks joint friction / gear binding |
-| `w` | Sweeps all 6 servos together | **Stress test**: verifies SZBK07 does not brownout |
+| `w` or `wf` | **SWEEPS 5 FINGERS ONLY** (Wrist holds steady at 90 deg neutral) | Daily finger articulation test |
+| `wa` or `wall` | **STRESS TEST: SWEEPS ALL 6 SERVOS TOGETHER** (5 fingers + wrist) | Verifies SZBK07 buck under full load |
 | `z` | Homes all servos (Fingers: 0 deg open, Wrist: 90 deg straight) | **Mandatory before mounting pulleys & gears** |
 | `p` | Cycles through preset poses (Open, Fist, Point, Peace, Wrist Left, Wrist Right, etc.) | Demonstrates full articulation |
-| `scan` | Runs live I2C bus scanner | Verifies SDA/SCL wiring if board isn't found |
 | `+` or `+5` | **TIGHTEN**: Increases active finger `pulseMax` by 5 ticks | Tightens loose finger at 180 deg |
 | `-` or `-5` | **RELIEVE**: Decreases active finger `pulseMax` by 5 ticks | Eliminates servo hum / buzz |
 | `+10` / `-10` | Adjusts active finger `pulseMax` by 10 ticks | Coarse tension tuning |
 | `max <ticks>` | Sets `pulseMax` directly for active channel (e.g. `max 550`) | Precise custom endpoint |
 | `min <ticks>` | Sets `pulseMin` directly for active channel (e.g. `min 102`) | Precise custom home position |
 | `pulse <ticks>` | Sends raw PWM ticks directly to active servo (e.g. `pulse 545`) | Direct hardware test without mapping |
+| `comp` | Displays current wrist decoupling compensation table | View tension offsets |
+| `comp on/off` | Toggles automatic wrist-tendon decoupling compensation | Enables/disables auto-tension fix |
+| `comp <ch> <k>`| Calibrates decoupling factor for a finger (e.g. `comp 4 0.15` or `comp pinky 0.18`) | Fine-tunes rotation compensation |
 | `<angle>` | Moves active channel to angle 0 to 200 (e.g. `185`, `190` for extra pull) | Over-rotation test |
-| `status` | Prints live angles, neutral positions, and pulse limits for all 6 channels | Verification diagnostic |
+| `status` | Prints live angles, home positions, pulse limits, and decoupling coeffs | Comprehensive diagnostic |
 | `trim <min> <max>` | Sets custom pulse limits (e.g. `trim 102 550`) | Full range calibration |
+| `scan` | Runs live I2C bus scanner | Verifies SDA/SCL wiring if board isn't found |
 | `gpio <angle>` | Drives a single servo on ESP32 GPIO 18 directly | Test without PCA9685 attached |
 | `?` or `help` | Prints command reference list | Cheat sheet |
 
@@ -161,7 +165,7 @@ When the sketch boots, it will automatically check for the PCA9685 at address `0
    - Press the yellow `ServoPulleyHitecV5_tighter.stl` winches onto finger servos 0-4 with string tie holes aligned straight toward the forearm.
    - Press the wrist drive gear (`WristGearsV4.stl`) onto servo 5 with the hand and forearm mechanically aligned straight ahead (90 deg neutral).
 5. **Individual Sweep (`0`, then `s`, `1`, then `s`... `5`, then `s`)**: Test each finger and the wrist rotation one by one. Check that lines wind cleanly and the wrist ring rotates smoothly without tooth skipping.
-6. **Stress Test (`w`)**: Sweep all 6 servos together. Place your multimeter across `OUT+` and `OUT-` on the SZBK07. The voltage should remain between $5.90\text{V}$ and $6.05\text{V}$ without resetting the ESP32.
+6. **Sweep Fingers (`w`) & Stress Test (`wa`)**: Send `w` to sweep just the 5 fingers while the wrist holds straight at 90 deg. Send `wa` to sweep all 6 servos together under full electrical load. Place your multimeter across `OUT+` and `OUT-` on the SZBK07. The voltage should remain between $5.90\text{V}$ and $6.05\text{V}$ without resetting the ESP32.
 
 ---
 
@@ -179,3 +183,37 @@ When the sketch boots, it will automatically check for the PCA9685 at address `0
 4. Continue typing `+` until the finger closes completely into a tight, rigid fist.
 5. If the motor begins to buzz or strain against a hard stop, type `-` to back off 5 ticks.
 6. Type `status` to inspect your final calibrated `PulseMax` values, and transfer them to `firmware/esp32_krypton/config.h`.
+
+
+---
+
+## 9. Wrist Rotation Tendon Decoupling Compensation
+
+### The Mechanical Coupling Phenomenon
+Because the 5 finger braided lines route through the rotating wrist collar (`Bolt_entretoise7.stl` and `cableholderwristV4.stl`), rotating the wrist mechanically alters the path length of the tendon lines:
+- **Rotating Left (< 90°)**: Outer lines (especially the Pinky on CH 4 and Ring on CH 3) wrap around a longer exterior circumference arc. Without compensation, the Pinky tendon tightens involuntarily simply because the wrist turned left.
+- **Rotating Right (> 90°)**: The opposite side of the wrist experiences path length changes while Pinky/Ring slacken.
+
+### Kinematic Decoupling Formula
+Both `esp32_servo_tester` and `esp32_krypton` include an active kinematic decoupling compensator:
+$$\Delta \theta_{\text{wrist}} = \theta_{\text{wrist}} - 90.0^\circ$$
+$$\theta_{\text{hardware}}[i] = \theta_{\text{target}}[i] + K_{\text{comp}}[i] \times \Delta \theta_{\text{wrist}}$$
+
+- When rotating Left ($\Delta \theta_{\text{wrist}} < 0$), a positive coefficient ($+0.15$) automatically relaxes the Pinky servo angle by up to $13.5^\circ$, keeping the physical finger at constant tension without curling involuntarily.
+- When rotating Right ($\Delta \theta_{\text{wrist}} > 0$), it takes up slack smoothly.
+
+### Calibrated Default Decoupling Coefficients
+| Channel | Finger | Default $K_{\text{comp}}$ | Behavior on Left Rotation |
+| :---: | :--- | :---: | :--- |
+| CH 0 | Thumb | `-0.10` | Slight tension increase |
+| CH 1 | Index | `-0.05` | Slight tension increase |
+| CH 2 | Middle | `0.00` | Center rotation axis (zero shift) |
+| CH 3 | Ring | `+0.08` | Relaxes servo to offset arc stretch |
+| CH 4 | Pinky | `+0.15` | Relaxes servo to offset arc stretch |
+
+You can dynamically fine-tune these live in the Serial Monitor using:
+```text
+comp pinky 0.18
+comp ring 0.10
+comp status
+```

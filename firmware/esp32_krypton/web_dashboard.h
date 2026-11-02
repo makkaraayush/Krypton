@@ -59,7 +59,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
     <header>
       <div class="brand">
         <h1>KRYPTON</h1>
-        <p>Bionic Arm Telemetry Hub</p>
+        <p>Bionic Arm Telemetry Hub (6-DOF)</p>
       </div>
       <div id="statusBadge" class="status-badge offline">
         <div class="status-dot"></div>
@@ -70,7 +70,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
     <div class="card">
       <div class="card-title">
         <span>Articulated Tendon Servos</span>
-        <button onclick="resetAll()" style="padding: 2px 8px; font-size: 0.7rem;">RESET (0&deg;)</button>
+        <button onclick="resetAll()" style="padding: 2px 8px; font-size: 0.7rem;">RESET (0&deg; / 90&deg;)</button>
       </div>
 
       <div class="slider-row">
@@ -97,20 +97,25 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         <div class="slider-header"><span>Pinky (CH 4)</span><span class="slider-val" id="val4">0&deg;</span></div>
         <input type="range" id="ch4" min="0" max="180" value="0" oninput="sendServo(4, this.value)">
       </div>
+
+      <div class="slider-row" style="margin-top: 6px; padding-top: 10px; border-top: 1px dashed var(--border);">
+        <div class="slider-header"><span>Wrist Rotation (CH 5)</span><span class="slider-val" id="val5">90&deg;</span></div>
+        <input type="range" id="ch5" min="0" max="180" value="90" oninput="sendServo(5, this.value)">
+      </div>
     </div>
 
     <div class="card">
-      <div class="card-title">Gesture Presets</div>
+      <div class="card-title">Gesture & Rotation Presets</div>
       <div class="btn-grid">
         <button class="btn-accent" onclick="sendPose('OPEN')">OPEN HAND</button>
         <button class="btn-accent" onclick="sendPose('FIST')">FIST</button>
         <button class="btn-accent" onclick="sendPose('POINT')">POINT</button>
         <button class="btn-yellow" onclick="sendPose('PEACE')">PEACE (V)</button>
         <button class="btn-yellow" onclick="sendPose('THUMBS_UP')">THUMBS UP</button>
-        <button class="btn-yellow" onclick="sendPose('HORNS')">HORNS</button>
         <button class="btn-accent" onclick="sendPose('ROCK_ON')">ROCK ON</button>
-        <button class="btn-yellow" onclick="sendPose('THREE_FINGER')">THREE</button>
-        <button class="btn-accent" onclick="sendPose('PINCH')">PINCH</button>
+        <button class="btn-yellow" onclick="sendPose('WRIST_LEFT')">WRIST LEFT</button>
+        <button class="btn-yellow" onclick="sendPose('WRIST_CENTER')">WRIST CENTER</button>
+        <button class="btn-yellow" onclick="sendPose('WRIST_RIGHT')">WRIST RIGHT</button>
       </div>
     </div>
 
@@ -118,19 +123,19 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
       <div class="card-title">Diagnostics</div>
       <div class="telemetry-row">
         <span>Bus / Driver</span>
-        <span class="telemetry-val">PCA9685 @ 0x40 (50Hz)</span>
+        <span class="telemetry-val">PCA9685 6-Ch @ 0x40 (50Hz)</span>
       </div>
       <div class="telemetry-row">
-        <span>Trajectory Mode</span>
-        <span class="telemetry-val">Dynamic Easing (~66Hz)</span>
+        <span>Wrist Decoupling</span>
+        <span class="telemetry-val">Kinematic Compensation ON</span>
+      </div>
+      <div class="telemetry-row">
+        <span>Trajectory Easing</span>
+        <span class="telemetry-val">Dynamic Smoothing (~66Hz)</span>
       </div>
       <div class="telemetry-row">
         <span>Vision / UDP Telemetry</span>
         <span class="telemetry-val">Port 8888 Active</span>
-      </div>
-      <div class="telemetry-row">
-        <span>Link Latency</span>
-        <span class="telemetry-val" id="linkLatency">&lt; 15 ms</span>
       </div>
     </div>
   </div>
@@ -159,9 +164,13 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         try {
           const data = JSON.parse(evt.data);
           if (data.angles) {
-            for (let i = 0; i < 5; i++) {
-              document.getElementById('ch' + i).value = data.angles[i];
-              document.getElementById('val' + i).innerText = Math.round(data.angles[i]) + '°';
+            for (let i = 0; i < 6; i++) {
+              const el = document.getElementById('ch' + i);
+              const valEl = document.getElementById('val' + i);
+              if (el && data.angles[i] !== undefined) {
+                el.value = data.angles[i];
+                valEl.innerText = Math.round(data.angles[i]) + '°';
+              }
             }
           }
         } catch(e) {}
