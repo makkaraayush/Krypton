@@ -120,16 +120,17 @@ public:
                 if (midWantsOpen)   effective_targets[CH_MIDDLE] = max(midCur, COLLISION_ZONE_MIN);
             }
         }
-        // 2. Conflict: Fingers closing to palm while Thumb wants to fold closed (FIST formation)
-        // Ensure fingers curl in first, then Thumb wraps outside
-        else if (indexTgt > 100.0f && thumbTgt > 100.0f) {
-            bool fingersStillCurling = (indexCur < 85.0f || midCur < 85.0f);
-            if (fingersStillCurling && thumbCur < 100.0f) {
-                // Hold Thumb at clearance angle until fingers curl inside palm
-                effective_targets[CH_THUMB] = min(thumbCur, THUMB_CLEARANCE_ANGLE + 5.0f);
-            }
+        // 2. Conflict: Fingers trying to TIGHTEN into palm while Thumb is already parked in palm
+        // Yield Thumb briefly to clearance so fingers can curl fully into palm, then Thumb clamps outside tightly
+        else if ((indexTgt > 100.0f || midTgt > 100.0f) && (indexCur < 85.0f || midCur < 85.0f) && thumbCur > THUMB_CLEARANCE_ANGLE) {
+            effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
         }
-        // 3. Conflict: Thumb trapped underneath and wants to open (< THUMB_CLEARANCE_ANGLE),
+        // 3. Natural Fist Formation: Fingers closing to palm while Thumb wants to fold closed
+        // Ensure fingers curl in first, then Thumb wraps outside
+        else if (indexTgt > 100.0f && thumbTgt > 100.0f && (indexCur < 85.0f || midCur < 85.0f)) {
+            effective_targets[CH_THUMB] = min(thumbCur, THUMB_CLEARANCE_ANGLE + 5.0f);
+        }
+        // 4. Conflict: Thumb trapped underneath and wants to open (< THUMB_CLEARANCE_ANGLE),
         // while Index or Middle is clamped over it (> 80 deg)
         else if (thumbTgt < THUMB_CLEARANCE_ANGLE && thumbCur > THUMB_CLEARANCE_ANGLE) {
             bool fingersClampedOver = (indexCur > 80.0f || midCur > 80.0f);

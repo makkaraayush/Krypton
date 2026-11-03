@@ -362,10 +362,21 @@ void applyPose(const char* name, float t, float i, float m, float r, float p, fl
         return;
     }
 
-    // 3. Conflict: Forming a FIST (Fingers curl into palm first, Thumb wraps outside)
-    bool fingersClosing = (i > 100.0f && m > 100.0f);
+    // 3. Conflict: Forming a FIST or fingers tightening while Thumb is already closed
+    bool fingersClosing = (i > 100.0f || m > 100.0f);
     bool thumbClosing   = (t > 100.0f);
-    if (fingersClosing && thumbClosing && currentAngles[0] < 80.0f) {
+    if (fingersClosing && thumbClosing) {
+        // If thumb is already folded into palm, yield it to 30 deg so fingers can curl in first
+        if (currentAngles[0] > 40.0f && (currentAngles[1] < 85.0f || currentAngles[2] < 85.0f)) {
+            Serial.println("  -> [SAFE-SEQ] Thumb is parked in palm! Yielding Thumb to 30 deg so fingers can curl in...");
+            for (float ang = currentAngles[0]; ang >= 30.0f; ang -= 5.0f) {
+                writeAngleHardware(0, ang, false);
+                delay(15);
+            }
+            writeAngleHardware(0, 30.0f, false);
+            delay(60);
+        }
+
         Serial.println("  -> [SAFE-SEQ] Curling fingers into palm first...");
         float maxFinger = max(max(currentAngles[1], currentAngles[2]), max(currentAngles[3], currentAngles[4]));
         for (float ang = maxFinger; ang <= 180.0f; ang += 5.0f) {
@@ -387,7 +398,7 @@ void applyPose(const char* name, float t, float i, float m, float r, float p, fl
             delay(15);
         }
         writeAngleHardware(0, t, false);
-        Serial.printf("[*] Pose [%s] applied cleanly (Thumb wrapped outside).\n", name);
+        Serial.printf("[*] Pose [%s] applied cleanly (Thumb wrapped outside, full tightness).\n", name);
         return;
     }
 
