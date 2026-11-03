@@ -13,25 +13,25 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo Checking pip availability...
-python -m pip --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [INFO] pip module not detected. Bootstrapping with ensurepip...
-    python -m ensurepip --default-pip
-)
-
 echo Checking dependencies (OpenCV, MediaPipe, NumPy, PySerial)...
-python -c "import cv2, mediapipe as mp, serial, numpy, requests; assert hasattr(mp, 'solutions')" >nul 2>&1
+python -c "import cv2, mediapipe, serial, numpy; assert hasattr(mediapipe, 'solutions')" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Installing or repairing required packages from requirements.txt...
-    python -m pip install --user -r "%~dp0requirements.txt"
+    echo Installing or verifying required packages from requirements.txt...
+    python -m pip install -r "%~dp0requirements.txt"
 )
 
 echo.
-echo Launching Vision Teleoperation (Default: UDP to 192.168.4.1:8888)...
-echo Press 'q' in the camera window to quit.
-echo Press 'm' to cycle modes (UDP / Serial / Offline).
+echo Launching Vision Teleoperation (Auto-Detect: USB Serial + Wi-Fi UDP)...
 echo.
-python "%~dp0hand_tracker.py" --mirror --mode udp --ip 192.168.4.1
+echo Controls:
+echo   [Q] Quit
+echo   [M] Cycle connection mode (Auto / Serial / UDP / Offline)
+echo   [W] Toggle wrist roll tracking
+echo   [C] Tare calibration (rest position)
+echo   [R] Reset calibration
+echo   [H] Help modal
+echo.
+
+python "%~dp0hand_tracker.py" --mirror --mode auto --ip 192.168.4.1
 
 pause

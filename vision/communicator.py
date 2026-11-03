@@ -1,12 +1,12 @@
 """
 Krypton Teleoperation Communicator
 Handles non-blocking data transmission over Serial USB, Wi-Fi UDP, or HTTP REST.
+Supports auto-detection of USB Serial and 6-channel hardware telemetry (5 fingers + wrist).
 """
 
 import time
 import socket
-import threading
-from typing import Optional, Tuple
+from typing import Optional
 
 try:
     import serial
@@ -23,10 +23,11 @@ except ImportError:
 
 
 class ArmCommunicator:
-    def __init__(self, mode: str = "udp", ip: str = "192.168.4.1", 
+    def __init__(self, mode: str = "auto", ip: str = "192.168.4.1", 
                  udp_port: int = 8888, serial_port: Optional[str] = None, 
                  baud: int = 115200):
-        self.mode = mode.lower()  # "udp", "serial", "http", "none"
+        self.requested_mode = mode.lower()  # "auto", "serial", "udp", "none"
+        self.mode = self.requested_mode
         self.ip = ip
         self.udp_port = udp_port
         self.serial_port = serial_port
@@ -42,7 +43,48 @@ class ArmCommunicator:
 
         self.setup_connection()
 
+    def _find_serial_port(self) -> Optional[str]:
+        if self.serial_port:
+            return self.serial_port
+        if not HAS_SERIAL:
+            return None
+        ports = serial.tools.list_ports.comports()
+        for p in ports:
+            desc = p.description.lower()
+            if any(x in desc for x in ["cp210", "ch340", "ftdi", "usb serial", "uart", "arduino", "esp32"]):
+                return p.device
+        if ports:
+            return ports[0].device
+        return None
+
     def setup_connection(self):
+        # Auto-detect mode: checks USB Serial first; if unavailable, falls back to UDP Wi-Fi
+        if self.requested_mode == "auto":
+            target_port = self._find_serial_port()
+            if target_port and HAS_SERIAL:
+                try:
+                    self._ser = serial.Serial(target_port, self.baud, timeout=0.05)
+                    self.mode = "serial"
+                    self.is_connected = True
+                    self.status_message = f"Auto -> Serial {target_port} @ {self.baud}"
+                    return
+                except Exception:
+                    self._ser = None
+
+            # Fall back to UDP Wi-Fi
+            try:
+                self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                self._sock.setblocking(False)
+                self.mode = "udp"
+                self.is_connected = True
+                self.status_message = f"Auto -> UDP {self.ip}:{self.udp_port}"
+                return
+            except Exception as e:
+                self.mode = "none"
+                self.is_connected = False
+                self.status_message = f"Auto -> Offline ({e})"
+                return
+
         if self.mode == "udp":
             try:
                 self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -59,18 +101,7 @@ class ArmCommunicator:
                 self.status_message = "pyserial not installed"
                 return
 
-            target_port = self.serial_port
-            if not target_port:
-                # Auto-detect CP2102, CH340, or FTDI USB bridge
-                ports = serial.tools.list_ports.comports()
-                for p in ports:
-                    desc = p.description.lower()
-                    if any(x in desc for x in ["cp210", "ch340", "ftdi", "usb serial", "uart"]):
-                        target_port = p.device
-                        break
-                if not target_port and ports:
-                    target_port = ports[0].device
-
+            target_port = self._find_serial_port()
             if target_port:
                 try:
                     self._ser = serial.Serial(target_port, self.baud, timeout=0.05)
@@ -88,28 +119,31 @@ class ArmCommunicator:
             self.status_message = "Telemetry Off (Visual Only)"
 
     def cycle_mode(self):
-        """Cycles between UDP, Serial, and None modes."""
+        """Cycles between Auto, Serial, UDP, and None modes."""
         self.close()
-        if self.mode == "udp":
-            self.mode = "serial"
-        elif self.mode == "serial":
-            self.mode = "none"
+        if self.requested_mode == "auto":
+            self.requested_mode = "serial"
+        elif self.requested_mode == "serial":
+            self.requested_mode = "udp"
+        elif self.requested_mode == "udp":
+            self.requested_mode = "none"
         else:
-            self.mode = "udp"
+            self.requested_mode = "auto"
+        self.mode = self.requested_mode
         self.setup_connection()
         return self.mode
 
-    def send_angles(self, thumb: float, index: float, middle: float, ring: float, pinky: float):
+    def send_angles(self, thumb: float, index: float, middle: float, ring: float, pinky: float, wrist: float = 90.0):
         """
-        Sends 5 finger angles (0 to 180 degrees) to ESP32.
-        Payload format: T:45.0,I:90.0,M:120.0,R:120.0,P:120.0\n
+        Sends 6 servo angles (0 to 180 degrees) to ESP32.
+        Payload format: T:45.0,I:90.0,M:120.0,R:120.0,P:120.0,W:90.0\n
         """
         now = time.time()
         if now - self._last_send_time < self._min_interval:
             return
 
         self._last_send_time = now
-        payload = f"T:{thumb:.1f},I:{index:.1f},M:{middle:.1f},R:{ring:.1f},P:{pinky:.1f}\n"
+        payload = f"T:{thumb:.1f},I:{index:.1f},M:{middle:.1f},R:{ring:.1f},P:{pinky:.1f},W:{wrist:.1f}\n"
 
         if self.mode == "udp" and self._sock:
             try:

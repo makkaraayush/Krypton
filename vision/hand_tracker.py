@@ -1,7 +1,8 @@
 """
 Krypton Hand Tracking Pipeline
-Uses MediaPipe Hands and OpenCV to track user hand articulation, compute 5-finger
-flexion angles, and stream low-latency kinematics to the ESP32 bionic controller.
+Uses MediaPipe Hands and OpenCV to track user hand articulation, compute 6-channel
+kinematics (5 fingers + wrist rotation), and stream low-latency commands to the ESP32 controller.
+Supports auto-detection of USB Serial and Wi-Fi UDP.
 """
 
 import sys
@@ -46,7 +47,6 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     middle_mcp = landmarks[9]
 
     # Hand scale normalization factor (stable multi-knuckle baseline)
-    # Combining wrist-to-middle and wrist-to-index MCP reduces perspective foreshortening
     dist_wm = np.linalg.norm([wrist.x - middle_mcp.x, wrist.y - middle_mcp.y, wrist.z - middle_mcp.z])
     dist_wi = np.linalg.norm([wrist.x - index_mcp.x, wrist.y - index_mcp.y, wrist.z - index_mcp.z])
     palm_span = 0.5 * (dist_wm + dist_wi)
@@ -55,26 +55,13 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
 
     flexions = []
 
-    # -------------------------------------------------------------
-    # 1. THUMB FLEXION (Isolating fold from lateral abduction)
-    # -------------------------------------------------------------
-    # Landmark indices:
-    # 1: CMC, 2: MCP, 3: IP, 4: TIP, 17: Pinky MCP
-    #
-    # (a) IP joint angle (landmark 3 formed by 2 -> 3 -> 4):
-    # Pure curling of thumb tip. When thumb is straight, angle ~ 155-175 deg.
-    # When bent/curled, drops to 90-120 deg.
+    # 1. THUMB FLEXION
     ip_angle = calculate_angle_3d(landmarks[2], landmarks[3], landmarks[4])
     ip_curl = np.clip((160.0 - ip_angle) / 50.0, 0.0, 1.0)
 
-    # (b) MCP joint angle (landmark 2 formed by 1 -> 2 -> 3):
-    # Base folding into palm. Straight is ~ 150-170 deg.
     mcp_angle = calculate_angle_3d(landmarks[1], landmarks[2], landmarks[3])
     mcp_curl = np.clip((152.0 - mcp_angle) / 45.0, 0.0, 1.0)
 
-    # (c) Opposition to pinky base (distance from 4 to 17):
-    # Moving thumb sideways (abduction) increases distance (> 1.2), never falsely folding.
-    # Folding thumb into palm brings tip close to pinky base (< 0.55).
     pinky_dist = np.linalg.norm([
         landmarks[4].x - landmarks[17].x,
         landmarks[4].y - landmarks[17].y,
@@ -82,16 +69,12 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     ]) / palm_span
     opp_flex = np.clip((1.05 - pinky_dist) / 0.55, 0.0, 1.0)
 
-    # Joint curl vs lateral move gate:
-    # If the thumb joints are straight (user is just moving thumb sideways),
-    # do NOT trigger a fold!
     joint_curl = max(ip_curl, 0.6 * ip_curl + 0.4 * mcp_curl)
     if joint_curl < 0.12 and opp_flex < 0.35:
         thumb_flex = 0.0
     else:
         thumb_flex = 0.5 * joint_curl + 0.5 * opp_flex
 
-    # Resting deadband (prevents jitter or slight natural curve from reporting fold)
     if thumb_flex < 0.10:
         thumb_flex = 0.0
     else:
@@ -99,9 +82,7 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
 
     flexions.append(float(np.clip(thumb_flex, 0.0, 1.0)))
 
-    # -------------------------------------------------------------
     # 2-5. INDEX, MIDDLE, RING, PINKY FLEXIONS
-    # -------------------------------------------------------------
     finger_indices = [
         (5, 6, 7, 8),     # Index: MCP, PIP, DIP, TIP
         (9, 10, 11, 12),  # Middle
@@ -110,11 +91,9 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     ]
 
     for mcp, pip, dip, tip in finger_indices:
-        # PIP joint bend angle
         pip_angle = calculate_angle_3d(landmarks[mcp], landmarks[pip], landmarks[dip])
         ang_flex = np.clip((165.0 - pip_angle) / 95.0, 0.0, 1.0)
 
-        # 3D distance from fingertip to wrist relative to palm size
         tip_dist = np.linalg.norm([
             landmarks[tip].x - wrist.x,
             landmarks[tip].y - wrist.y,
@@ -122,10 +101,8 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
         ]) / palm_span
         dist_flex = np.clip((1.75 - tip_dist) / 0.95, 0.0, 1.0)
 
-        # Weighted combination: 55% joint angle + 45% spatial distance
         f_raw = 0.55 * ang_flex + 0.45 * dist_flex
 
-        # Rest deadband
         if f_raw < 0.08:
             f_norm = 0.0
         else:
@@ -136,26 +113,50 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     return flexions
 
 
+def compute_wrist_roll(landmarks) -> float:
+    """
+    Computes hand roll / tilt in degrees mapped to 0-180 for wrist rotation servo.
+    Neutral (palm flat / vertical) = 90.0 degrees.
+    Tilted left = 0.0 to 90.0 degrees.
+    Tilted right = 90.0 to 180.0 degrees.
+    """
+    index_mcp = landmarks[5]
+    pinky_mcp = landmarks[17]
+
+    dx = pinky_mcp.x - index_mcp.x
+    dy = pinky_mcp.y - index_mcp.y
+
+    roll_rad = np.arctan2(dy, dx)
+    roll_deg = np.degrees(roll_rad)
+
+    # Center around horizontal (roll_deg ~ 0 when palm flat in mirrored view)
+    # Map tilt from -50 deg to +50 deg into 0 to 180 deg
+    wrist_target = 90.0 + np.clip(roll_deg * 1.5, -90.0, 90.0)
+    return float(np.clip(wrist_target, 0.0, 180.0))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Krypton Real-Time Vision Teleoperation")
     parser.add_argument("--cam", type=int, default=0, help="Camera device index")
-    parser.add_argument("--mode", type=str, default="udp", choices=["udp", "serial", "none"], help="Telemetry mode")
+    parser.add_argument("--mode", type=str, default="auto", choices=["auto", "serial", "udp", "none"], help="Telemetry mode (default: auto)")
     parser.add_argument("--ip", type=str, default="192.168.4.1", help="ESP32 IP address for UDP")
     parser.add_argument("--udp-port", type=int, default=8888, help="UDP telemetry port on ESP32 (default 8888)")
     parser.add_argument("--port", type=str, default=None, help="Serial COM port (e.g. COM3) or empty for auto-detect")
     parser.add_argument("--alpha", type=float, default=0.35, help="EMA motion smoothing factor 0.05-0.95 (default 0.35)")
     parser.add_argument("--mirror", action="store_true", default=True, help="Mirror camera view")
+    parser.add_argument("--wrist", action="store_true", default=False, help="Enable live wrist roll tracking on boot")
     args = parser.parse_args()
 
     print("==================================================")
     print("      KRYPTON REAL-TIME VISION TELEOPERATION      ")
     print("==================================================")
     print(f"[*] Telemetry Mode : {args.mode.upper()}")
-    if args.mode == "udp":
+    if args.mode in ["auto", "udp"]:
         print(f"[*] UDP Target     : {args.ip}:{args.udp_port}")
     print(f"[*] Filter Alpha   : {args.alpha}")
     print(f"[*] Camera Index   : {args.cam}")
     print(f"[*] Mirror Display : {args.mirror}")
+    print(f"[*] Wrist Tracking : {'ON' if args.wrist else 'LOCKED (90 deg)'}")
     print("--------------------------------------------------")
 
     cap = cv2.VideoCapture(args.cam)
@@ -179,11 +180,12 @@ def main():
     comm = ArmCommunicator(mode=args.mode, ip=args.ip, udp_port=args.udp_port, serial_port=args.port)
     hud = CyberHud()
 
-    # Low-pass filter state
-    smoothed_angles = [0.0, 0.0, 0.0, 0.0, 0.0]
+    # Low-pass filter state (6 channels: T, I, M, R, P, W)
+    smoothed_angles = [0.0, 0.0, 0.0, 0.0, 0.0, 90.0]
     raw_flexions = [0.0, 0.0, 0.0, 0.0, 0.0]
     zero_offsets = [0.0, 0.0, 0.0, 0.0, 0.0]
     alpha = max(0.05, min(args.alpha, 0.95))
+    track_wrist = args.wrist
 
     notification_text = ""
     notification_until = 0.0
@@ -194,6 +196,7 @@ def main():
 
     print("[*] Tracking started. Aim camera at your RIGHT HAND.")
     print("[*] Tip: Hold hand relaxed and press 'c' to zero-tare your rest position.")
+    print("[*] Press 'w' to toggle wrist roll tracking.")
 
     try:
         while cap.isOpened():
@@ -211,7 +214,7 @@ def main():
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(rgb_frame)
 
-            calibrated_flexions = [0.0, 0.0, 0.0, 0.0, 0.0]
+            calibrated_flexions = [0.0, 0.0, 0.0, 0.0, 0.0, 0.5]
 
             if results.multi_hand_landmarks:
                 for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
@@ -238,13 +241,23 @@ def main():
                         target_deg = calibrated_flexions[i] * 180.0
                         smoothed_angles[i] = alpha * target_deg + (1.0 - alpha) * smoothed_angles[i]
 
-                    # Transmit to ESP32
+                    # Wrist roll tracking
+                    if track_wrist:
+                        raw_wrist_deg = compute_wrist_roll(hand_landmarks.landmark)
+                        smoothed_angles[5] = alpha * raw_wrist_deg + (1.0 - alpha) * smoothed_angles[5]
+                    else:
+                        smoothed_angles[5] = 90.0
+
+                    calibrated_flexions[5] = float(np.clip(smoothed_angles[5] / 180.0, 0.0, 1.0))
+
+                    # Transmit all 6 channels to ESP32
                     comm.send_angles(
                         smoothed_angles[0],
                         smoothed_angles[1],
                         smoothed_angles[2],
                         smoothed_angles[3],
-                        smoothed_angles[4]
+                        smoothed_angles[4],
+                        smoothed_angles[5]
                     )
 
             # Check active notification
@@ -264,7 +277,14 @@ def main():
                 break
             elif key == ord('m'):
                 new_mode = comm.cycle_mode()
+                notification_text = f"MODE: {new_mode.upper()}"
+                notification_until = time.time() + 2.0
                 print(f"[COMM] Switched mode to: {new_mode.upper()}")
+            elif key == ord('w'):
+                track_wrist = not track_wrist
+                notification_text = f"WRIST: {'LIVE TRACK' if track_wrist else 'LOCKED 90 DEG'}"
+                notification_until = time.time() + 2.0
+                print(f"[WRIST] Wrist tracking: {'ENABLED' if track_wrist else 'LOCKED AT 90 DEG'}")
             elif key == ord('c'):
                 zero_offsets = list(raw_flexions)
                 notification_text = "ZERO TARE CALIBRATED"
@@ -272,7 +292,7 @@ def main():
                 print(f"[CALIBRATION] Rest zero offsets set: {[round(x, 2) for x in zero_offsets]}")
             elif key == ord('r'):
                 zero_offsets = [0.0, 0.0, 0.0, 0.0, 0.0]
-                smoothed_angles = [0.0, 0.0, 0.0, 0.0, 0.0]
+                smoothed_angles = [0.0, 0.0, 0.0, 0.0, 0.0, 90.0]
                 notification_text = "CALIBRATION RESET"
                 notification_until = time.time() + 2.0
                 print("[CALIBRATION] Reset zero offsets to factory default.")
