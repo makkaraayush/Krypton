@@ -157,21 +157,6 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
 
         flexions.append(float(f_norm))
 
-    # -------------------------------------------------------------
-    # THUMB-OVER-INDEX OCCLUSION SAFEGUARD
-    # -------------------------------------------------------------
-    # When thumb is folded across the fingers in a fist (thumb_norm > 0.35):
-    # MediaPipe can lose sight of index DIP/TIP under the thumb.
-    # In a fist, Middle finger is completely visible and tracks cleanly.
-    # If Thumb is closed and Middle finger is clenched in a fist,
-    # Index CANNOT physically be open underneath: lock Index to match Middle finger.
-    thumb_val = flexions[0]
-    index_val = flexions[1]
-    mid_val   = flexions[2]
-
-    if thumb_val > 0.35 and mid_val > 0.55:
-        flexions[1] = max(index_val, mid_val)
-
     return flexions
 
 
@@ -318,12 +303,6 @@ def main():
                         else:
                             dyn_alpha = min(alpha, 0.35)
                         smoothed_angles[i] = dyn_alpha * target_deg + (1.0 - dyn_alpha) * smoothed_angles[i]
-
-                    # SOFTWARE SAFETY INTERLOCK:
-                    # If Thumb is closed across palm (> 40 deg) and Middle finger is closed in a fist (> 60 deg),
-                    # Index is physically underneath the thumb! Never allow Index to transmit an open angle (< 100 deg)
-                    if smoothed_angles[0] > 40.0 and smoothed_angles[2] > 60.0:
-                        smoothed_angles[1] = max(smoothed_angles[1], smoothed_angles[2])
 
                     # Wrist roll tracking
                     if track_wrist:

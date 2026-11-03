@@ -102,31 +102,11 @@ public:
         float indexTgt = _target_angles[CH_INDEX];
         float thumbTgt = _target_angles[CH_THUMB];
 
-        // HARD SAFETY INTERLOCK:
-        // When Thumb is parked/closed across the palm (thumbCur > 35 deg), Index is physically underneath it.
-        // Index MUST NEVER be allowed to open towards 0 deg while Thumb is in the way,
-        // even if vision bugs out or sends 0 deg!
-        if (thumbCur > THUMB_CLEARANCE_ANGLE) {
-            // Case 1: Thumb target is closed (> 45 deg) -> system is in FIST or thumb clamp pose.
-            // Under NO circumstance can Index open below its current angle or 110 deg!
-            if (thumbTgt > 45.0f) {
-                if (effective_targets[CH_INDEX] < 110.0f) {
-                    effective_targets[CH_INDEX] = max(indexCur, 110.0f);
-                }
-            }
-            // Case 2: Intentional Hand Open (thumbTgt <= 45 deg).
-            // Thumb must travel outward first! Index is strictly held at indexCur until Thumb clears <= 35 deg.
-            else {
-                effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
-                if (effective_targets[CH_INDEX] < indexCur) {
-                    effective_targets[CH_INDEX] = indexCur;
-                }
-            }
-        }
-        // Case 3: Index curling into palm from open (< 60 deg currently, targeting > 100 deg)
-        // while Thumb is already closed. Yield thumb briefly so index can curl inside first.
-        else if (indexTgt > 100.0f && indexCur < 60.0f && thumbCur > THUMB_CLEARANCE_ANGLE) {
-            effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
+        // SAFETY INTERLOCK:
+        // Index is never allowed to open (move towards 0 deg) while Thumb is physically closed over it (> 45 deg)!
+        // If Thumb is open (<= 45 deg), Index moves completely freely from 0 to 180 deg.
+        if (thumbCur > 45.0f && indexTgt < indexCur) {
+            effective_targets[CH_INDEX] = indexCur; // Lock index until thumb physically clears <= 45 deg
         }
 #endif
 
