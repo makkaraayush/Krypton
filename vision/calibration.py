@@ -104,8 +104,7 @@ def map_flexion_to_angle(flexion: float, cfg: dict) -> float:
     else:
         # Second half: 0.5 to 1.0 -> mid_a to max_a
         t = (f - 0.5) / 0.5
-        # Soften late tension spike with reciprocal curve
-        t_curved = t ** (1.0 / max(exp * 0.8, 0.5))
+        t_curved = t ** exp
         angle = mid_a + t_curved * (max_a - mid_a)
 
     return max(0.0, min(angle, 180.0))

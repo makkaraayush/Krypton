@@ -92,8 +92,8 @@ const float WRIST_COMP_COEFFS[5] = { -0.10f, -0.05f, 0.00f, 0.08f, 0.15f }; // T
 // 2. When forming a fist, fingers curl into the palm first before Thumb folds over the outside.
 // 3. If Thumb is trapped under curled fingers and wants to open, fingers yield clearance first.
 #define ENABLE_COLLISION_AVOIDANCE   true
-#define THUMB_CLEARANCE_ANGLE        35.0f   // Safe clearance angle for thumb to unclamp fingers
+#define THUMB_CLEARANCE_ANGLE        85.0f   // Safe clearance angle for thumb (safe till 85 deg for index)
 #define FINGER_CLEARANCE_ANGLE       45.0f   // Angle below which index/middle are considered cleared
-#define COLLISION_ZONE_MIN           50.0f   // Minimum angle where thumb and fingers physically overlap
+#define COLLISION_ZONE_MIN           85.0f   // Minimum angle where thumb physically overlaps index
 
 #endif // CONFIG_H

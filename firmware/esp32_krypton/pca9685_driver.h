@@ -100,13 +100,12 @@ public:
         float thumbCur = _current_angles[CH_THUMB];
         float indexCur = _current_angles[CH_INDEX];
         float indexTgt = _target_angles[CH_INDEX];
-        float thumbTgt = _target_angles[CH_THUMB];
 
         // SAFETY INTERLOCK:
-        // Index is never allowed to open (move towards 0 deg) while Thumb is physically closed over it (> 45 deg)!
-        // If Thumb is open (<= 45 deg), Index moves completely freely from 0 to 180 deg.
-        if (thumbCur > 45.0f && indexTgt < indexCur) {
-            effective_targets[CH_INDEX] = indexCur; // Lock index until thumb physically clears <= 45 deg
+        // Index is never allowed to open (move towards 0 deg) while Thumb is physically closed over it (> 85 deg)!
+        // If Thumb is in safe clearance (<= 85 deg), Index moves completely freely from 0 to 180 deg.
+        if (thumbCur > THUMB_CLEARANCE_ANGLE && indexTgt < indexCur) {
+            effective_targets[CH_INDEX] = indexCur; // Lock index until thumb physically clears <= 85 deg
         }
 #endif
 
