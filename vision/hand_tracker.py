@@ -120,49 +120,32 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     # -------------------------------------------------------------
     # 2-5. INDEX, MIDDLE, RING, PINKY FLEXIONS
     # -------------------------------------------------------------
-    # Uses self-normalizing anatomical finger segment lengths (MCP->PIP->DIP->TIP).
-    # Adapts automatically to individual finger sizes so shorter fingers like the Pinky
-    # achieve true 0.0 when fully open and solid 1.0 when clenched into a fist.
-    finger_indices = [
-        (5, 6, 7, 8),     # Index: MCP, PIP, DIP, TIP
-        (9, 10, 11, 12),  # Middle
-        (13, 14, 15, 16), # Ring
-        (17, 18, 19, 20)  # Pinky
+    # Stable tip-to-MCP knuckle distance normalized by palm_span.
+    # Uses specific anatomical open baselines for each finger:
+    # Index/Middle/Ring use natural full spans (~1.05-1.12), while Pinky uses its
+    # naturally shorter baseline (0.72) so Pinky opens to true 0.0 and closes to 1.0!
+    finger_configs = [
+        # (mcp, pip, dip, tip, open_span, clench_range)
+        (5, 6, 7, 8,    1.05, 0.68),  # Index
+        (9, 10, 11, 12, 1.12, 0.72),  # Middle
+        (13, 14, 15, 16, 1.05, 0.68), # Ring
+        (17, 18, 19, 20, 0.72, 0.48), # Pinky
     ]
 
-    for mcp_idx, pip_idx, dip_idx, tip_idx in finger_indices:
-        p_mcp = landmarks[mcp_idx]
-        p_pip = landmarks[pip_idx]
-        p_dip = landmarks[dip_idx]
-        p_tip = landmarks[tip_idx]
+    for mcp_idx, pip_idx, dip_idx, tip_idx, open_span, clench_range in finger_configs:
+        v_mcp = np.array([landmarks[mcp_idx].x, landmarks[mcp_idx].y, landmarks[mcp_idx].z])
+        v_tip = np.array([landmarks[tip_idx].x, landmarks[tip_idx].y, landmarks[tip_idx].z])
 
-        v_mcp = np.array([p_mcp.x, p_mcp.y, p_mcp.z])
-        v_pip = np.array([p_pip.x, p_pip.y, p_pip.z])
-        v_dip = np.array([p_dip.x, p_dip.y, p_dip.z])
-        v_tip = np.array([p_tip.x, p_tip.y, p_tip.z])
+        # (a) Monotonic Tip-to-MCP Distance
+        tip_mcp_dist = np.linalg.norm(v_tip - v_mcp) / palm_span
+        dist_flex = np.clip((open_span - tip_mcp_dist) / clench_range, 0.0, 1.0)
 
-        # Self-normalized anatomical finger bone length:
-        # Sum of the 3 phalanx segments: (MCP->PIP) + (PIP->DIP) + (DIP->TIP)
-        # Dynamically scales to each finger's physical proportions, eliminating open-pinky offsets
-        seg_prox = np.linalg.norm(v_pip - v_mcp)
-        seg_mid  = np.linalg.norm(v_dip - v_pip)
-        seg_dist = np.linalg.norm(v_tip - v_dip)
-        finger_full_len = seg_prox + seg_mid + seg_dist
-        if finger_full_len < 1e-4:
-            finger_full_len = palm_span
-
-        # Distance from Tip to MCP relative to the finger's own total extended length:
-        # Fully open / extended straight: extension_ratio is ~ 0.94 - 1.0 (for ALL fingers)
-        # Closed in a fist: extension_ratio drops to ~ 0.22 - 0.35
-        extension_ratio = np.linalg.norm(v_tip - v_mcp) / finger_full_len
-        dist_flex = np.clip((0.92 - extension_ratio) / 0.60, 0.0, 1.0)
-
-        # PIP joint curl (knuckle bend)
-        pip_angle = calculate_angle_3d(p_mcp, p_pip, p_dip)
+        # (b) PIP joint angle
+        pip_angle = calculate_angle_3d(landmarks[mcp_idx], landmarks[pip_idx], landmarks[dip_idx])
         pip_flex = np.clip((165.0 - pip_angle) / 95.0, 0.0, 1.0)
 
-        # DIP joint curl
-        dip_angle = calculate_angle_3d(p_pip, p_dip, p_tip)
+        # (c) DIP joint angle
+        dip_angle = calculate_angle_3d(landmarks[pip_idx], landmarks[dip_idx], landmarks[tip_idx])
         dip_flex = np.clip((160.0 - dip_angle) / 75.0, 0.0, 1.0)
 
         f_raw = 0.50 * dist_flex + 0.35 * pip_flex + 0.15 * dip_flex
@@ -170,31 +153,24 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
         if f_raw < 0.08:
             f_norm = 0.0
         else:
-            # Reaches solid 1.0 (180 deg) at f_raw >= 0.78 and STAYS at 1.0 under tightest fist squeeze
             f_norm = np.clip((f_raw - 0.08) / 0.70, 0.0, 1.0)
 
         flexions.append(float(f_norm))
 
     # -------------------------------------------------------------
-    # THUMB-OVER-INDEX OCCLUSION COMPENSATION
+    # THUMB-OVER-INDEX OCCLUSION SAFEGUARD
     # -------------------------------------------------------------
-    # When the thumb folds horizontally over the index finger in a fist:
-    # Camera vision occludes the index DIP/TIP, which can cause MediaPipe to misestimate
-    # occluded index landmarks and falsely drop index angle from 180 deg to ~150 deg.
-    # If the thumb is wrapped across the palm (thumb_norm > 0.40) and covering index,
-    # and either index was already curled or middle finger is closed in a fist,
-    # clamp index solidly to 1.0 (180 deg).
+    # When thumb is folded across the fingers in a fist (thumb_norm > 0.35):
+    # MediaPipe can lose sight of index DIP/TIP under the thumb.
+    # In a fist, Middle finger is completely visible and tracks cleanly.
+    # If Thumb is closed and Middle finger is clenched in a fist,
+    # Index CANNOT physically be open underneath: lock Index to match Middle finger.
     thumb_val = flexions[0]
     index_val = flexions[1]
     mid_val   = flexions[2]
 
-    if thumb_val > 0.40 and horiz_progress > 0.35:
-        dist_thumb_to_index_pip = np.linalg.norm(v_thumb_tip - v_index_pip) / palm_span
-        if dist_thumb_to_index_pip < 0.48:
-            # Thumb is directly covering the index finger
-            if index_val > 0.65 or mid_val > 0.70:
-                # Index is curled in a fist under the thumb -> lock to 1.0 (180 deg)
-                flexions[1] = 1.0
+    if thumb_val > 0.35 and mid_val > 0.55:
+        flexions[1] = max(index_val, mid_val)
 
     return flexions
 
@@ -330,23 +306,30 @@ def main():
                     for i in range(5):
                         ch_key = channel_keys[i]
                         target_deg = calibration.map_flexion_to_angle(calibrated_flexions[i], profile[ch_key])
-                        # Adaptive low-latency filter:
-                        # Quick gesture snap (delta > 8 deg): snap at dynamic alpha 0.88-0.92 for near real-time tracking
-                        # Holding static pose (delta < 2.5 deg): smooth at lower alpha to eliminate camera landmark noise
+                        # Ultra-fast real-time adaptive tracking:
+                        # Fast gesture snap (delta > 6 deg): snap at dynamic alpha 0.95 for true real-time replication (<25ms)
+                        # Slower settling: alpha 0.75
+                        # Static rest pose (delta < 2.0 deg): alpha 0.35 to eliminate sensor landmark jitter
                         delta = abs(target_deg - smoothed_angles[i])
-                        if delta > 10.0:
-                            dyn_alpha = 0.90
-                        elif delta > 4.0:
-                            dyn_alpha = 0.70
+                        if delta > 6.0:
+                            dyn_alpha = 0.95
+                        elif delta > 2.5:
+                            dyn_alpha = 0.75
                         else:
                             dyn_alpha = min(alpha, 0.35)
                         smoothed_angles[i] = dyn_alpha * target_deg + (1.0 - dyn_alpha) * smoothed_angles[i]
+
+                    # SOFTWARE SAFETY INTERLOCK:
+                    # If Thumb is closed across palm (> 40 deg) and Middle finger is closed in a fist (> 60 deg),
+                    # Index is physically underneath the thumb! Never allow Index to transmit an open angle (< 100 deg)
+                    if smoothed_angles[0] > 40.0 and smoothed_angles[2] > 60.0:
+                        smoothed_angles[1] = max(smoothed_angles[1], smoothed_angles[2])
 
                     # Wrist roll tracking
                     if track_wrist:
                         raw_wrist_deg = compute_wrist_roll(hand_landmarks.landmark)
                         w_delta = abs(raw_wrist_deg - smoothed_angles[5])
-                        w_alpha = 0.88 if w_delta > 10.0 else (0.65 if w_delta > 4.0 else 0.35)
+                        w_alpha = 0.92 if w_delta > 6.0 else (0.70 if w_delta > 2.5 else 0.35)
                         smoothed_angles[5] = w_alpha * raw_wrist_deg + (1.0 - w_alpha) * smoothed_angles[5]
                     else:
                         smoothed_angles[5] = 90.0

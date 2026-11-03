@@ -102,19 +102,30 @@ public:
         float indexTgt = _target_angles[CH_INDEX];
         float thumbTgt = _target_angles[CH_THUMB];
 
-        // 1. Conflict: Index wants to OPEN (< 45 deg) while Thumb is currently clamped across the palm (> 35 deg)
-        // Yield thumb outward first so index has a free swing path without tension snag
-        if (indexTgt < FINGER_CLEARANCE_ANGLE && indexCur > FINGER_CLEARANCE_ANGLE && thumbCur > THUMB_CLEARANCE_ANGLE) {
-            effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
-            // Hold index from pulling hard against clamped thumb until thumb clears past 42 deg
-            if (thumbCur > THUMB_CLEARANCE_ANGLE + 7.0f) {
-                effective_targets[CH_INDEX] = max(indexCur, COLLISION_ZONE_MIN);
+        // HARD SAFETY INTERLOCK:
+        // When Thumb is parked/closed across the palm (thumbCur > 35 deg), Index is physically underneath it.
+        // Index MUST NEVER be allowed to open towards 0 deg while Thumb is in the way,
+        // even if vision bugs out or sends 0 deg!
+        if (thumbCur > THUMB_CLEARANCE_ANGLE) {
+            // Case 1: Thumb target is closed (> 45 deg) -> system is in FIST or thumb clamp pose.
+            // Under NO circumstance can Index open below its current angle or 110 deg!
+            if (thumbTgt > 45.0f) {
+                if (effective_targets[CH_INDEX] < 110.0f) {
+                    effective_targets[CH_INDEX] = max(indexCur, 110.0f);
+                }
+            }
+            // Case 2: Intentional Hand Open (thumbTgt <= 45 deg).
+            // Thumb must travel outward first! Index is strictly held at indexCur until Thumb clears <= 35 deg.
+            else {
+                effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
+                if (effective_targets[CH_INDEX] < indexCur) {
+                    effective_targets[CH_INDEX] = indexCur;
+                }
             }
         }
-        // 2. Conflict: Index is actively CLOSING into the palm (< 65 deg currently, targeting > 100 deg)
-        // while Thumb is already closed across the palm (> 35 deg).
-        // Yield thumb briefly so index can curl inside the palm first, then Thumb clamps outside tightly
-        else if (indexTgt > 100.0f && indexCur < 65.0f && thumbCur > THUMB_CLEARANCE_ANGLE) {
+        // Case 3: Index curling into palm from open (< 60 deg currently, targeting > 100 deg)
+        // while Thumb is already closed. Yield thumb briefly so index can curl inside first.
+        else if (indexTgt > 100.0f && indexCur < 60.0f && thumbCur > THUMB_CLEARANCE_ANGLE) {
             effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
         }
 #endif
@@ -123,9 +134,9 @@ public:
             float diff = effective_targets[i] - _current_angles[i];
             float absDiff = abs(diff);
             if (absDiff > 0.1f) {
-                // Adaptive step: large movements accelerate dynamically (up to 25 deg per step = 2500 deg/sec)
+                // Adaptive step: large movements accelerate dynamically (up to 30 deg per step = ~3750 deg/sec)
                 // Small movements step smoothly to avoid overshoot and buzzing
-                float dynamicStep = max(TRAJECTORY_STEP_DEG, absDiff * 0.45f);
+                float dynamicStep = max(TRAJECTORY_STEP_DEG, absDiff * 0.55f);
                 if (absDiff <= dynamicStep) {
                     _current_angles[i] = effective_targets[i];
                 } else {

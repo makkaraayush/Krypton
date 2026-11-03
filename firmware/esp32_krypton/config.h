@@ -83,8 +83,8 @@ const float WRIST_COMP_COEFFS[5] = { -0.10f, -0.05f, 0.00f, 0.08f, 0.15f }; // T
 // ==========================================
 // Prevents abrupt jerk and tendon snaps by stepping current angle towards target
 #define MOTION_SMOOTHING             true
-#define TRAJECTORY_STEP_DEG          12.0f   // High-speed tracking step (~1200 deg/sec) for near real-time replication
-#define TRAJECTORY_INTERVAL_MS       10      // Easing loop update interval (100 Hz)
+#define TRAJECTORY_STEP_DEG          16.0f   // High-speed tracking step (~2000 deg/sec) for true real-time replication
+#define TRAJECTORY_INTERVAL_MS       8       // Ultra-fast easing loop update interval (125 Hz)
 
 // Intelligent Thumb & Finger Collision Avoidance
 // Prevents mechanical entrapment when transitioning between FIST, POINT, and OPEN poses:

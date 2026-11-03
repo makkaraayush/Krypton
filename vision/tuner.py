@@ -272,6 +272,10 @@ class KryptonTunerApp:
                     self.live_human_flexions[5] = w_deg / 180.0
                     self.live_servo_angles[5] = w_deg
 
+                    # Software Interlock: Protect pulley system if thumb is closed over fingers
+                    if self.live_servo_angles[0] > 40.0 and self.live_servo_angles[2] > 60.0:
+                        self.live_servo_angles[1] = max(self.live_servo_angles[1], self.live_servo_angles[2])
+
                     # Stream live angles to arm so user sees arm move in real time
                     self.comm.send_angles(
                         self.live_servo_angles[0],
