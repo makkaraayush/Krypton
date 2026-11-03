@@ -2,6 +2,7 @@
 Krypton Teleoperation Communicator
 Handles non-blocking data transmission over Serial USB, Wi-Fi UDP, or HTTP REST.
 Supports auto-detection of USB Serial and 6-channel hardware telemetry (5 fingers + wrist).
+Includes explicit detection and user guidance for locked COM ports (e.g. Arduino Serial Monitor).
 """
 
 import time
@@ -57,19 +58,39 @@ class ArmCommunicator:
             return ports[0].device
         return None
 
+    def _open_serial(self, port_name: str) -> Optional[serial.Serial]:
+        if not HAS_SERIAL:
+            return None
+        try:
+            ser = serial.Serial()
+            ser.port = port_name
+            ser.baudrate = self.baud
+            ser.timeout = 0.05
+            ser.dtr = False
+            ser.rts = False
+            ser.open()
+            return ser
+        except Exception as e:
+            err_str = str(e)
+            if "PermissionError" in err_str or "Access is denied" in err_str:
+                print(f"\n[!] SERIAL ACCESS DENIED on {port_name}:")
+                print(f"[!] The Arduino IDE Serial Monitor is holding {port_name} open.")
+                print(f"[!] Close the Serial Monitor tab in Arduino IDE and retry.\n")
+            else:
+                print(f"[!] Serial connection failed on {port_name}: {e}")
+            return None
+
     def setup_connection(self):
         # Auto-detect mode: checks USB Serial first; if unavailable, falls back to UDP Wi-Fi
         if self.requested_mode == "auto":
             target_port = self._find_serial_port()
             if target_port and HAS_SERIAL:
-                try:
-                    self._ser = serial.Serial(target_port, self.baud, timeout=0.05)
+                self._ser = self._open_serial(target_port)
+                if self._ser:
                     self.mode = "serial"
                     self.is_connected = True
                     self.status_message = f"Auto -> Serial {target_port} @ {self.baud}"
                     return
-                except Exception:
-                    self._ser = None
 
             # Fall back to UDP Wi-Fi
             try:
@@ -103,13 +124,13 @@ class ArmCommunicator:
 
             target_port = self._find_serial_port()
             if target_port:
-                try:
-                    self._ser = serial.Serial(target_port, self.baud, timeout=0.05)
+                self._ser = self._open_serial(target_port)
+                if self._ser:
                     self.is_connected = True
                     self.status_message = f"Serial {target_port} @ {self.baud}"
-                except Exception as e:
+                else:
                     self.is_connected = False
-                    self.status_message = f"Serial Err: {e}"
+                    self.status_message = f"Serial {target_port} Locked"
             else:
                 self.is_connected = False
                 self.status_message = "No COM port found"

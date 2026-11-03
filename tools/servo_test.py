@@ -180,10 +180,22 @@ def main():
         else:
             print(f"[*] Opening serial port: {target_port} @ {args.baud} baud")
             try:
-                ser_obj = serial.Serial(target_port, args.baud, timeout=0.1)
-                time.sleep(1.5)  # Allow ESP32 reboot window if DTR pulled low
+                ser_obj = serial.Serial()
+                ser_obj.port = target_port
+                ser_obj.baudrate = args.baud
+                ser_obj.timeout = 0.1
+                ser_obj.dtr = False
+                ser_obj.rts = False
+                ser_obj.open()
+                time.sleep(0.5)
             except Exception as e:
-                print(f"[!] Serial error: {e}. Falling back to UDP...")
+                err_str = str(e)
+                if "PermissionError" in err_str or "Access is denied" in err_str:
+                    print(f"\n[!] SERIAL ACCESS DENIED on {target_port}:")
+                    print(f"[!] The Arduino IDE Serial Monitor is holding {target_port} open.")
+                    print(f"[!] Please CLOSE the Serial Monitor in Arduino IDE, then run this again!\n")
+                else:
+                    print(f"[!] Serial error: {e}. Falling back to UDP...")
                 effective_mode = "udp"
                 ser_obj = None
 

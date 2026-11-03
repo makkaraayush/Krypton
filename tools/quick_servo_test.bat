@@ -15,3 +15,4 @@ if %errorlevel% neq 0 (
 python "%~dp0servo_test.py" --mode auto
 
 pause
+

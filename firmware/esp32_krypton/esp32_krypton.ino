@@ -159,48 +159,65 @@ void handleUDPTelemetry() {
 }
 
 // ==========================================
-// Serial USB Protocol (Wired Fallback)
+// Serial USB Protocol (Wired Fallback - Non-Blocking)
 // ==========================================
-void handleSerialCommands() {
-    if (Serial.available()) {
-        String line = Serial.readStringUntil('\n');
-        line.trim();
-        if (line.length() == 0) return;
+void processSerialLine(const String& line) {
+    if (line.startsWith("POSE:")) {
+        String poseName = line.substring(5);
+        const GesturePose* p = findGesture(poseName);
+        if (p) {
+            for (int i = 0; i < NUM_SERVOS; i++) {
+                pcaDriver.setServoAngle(i, p->angles[i]);
+            }
+            Serial.println("OK:POSE_SET");
+        } else {
+            Serial.println("ERR:UNKNOWN_POSE");
+        }
+    } else if (line.indexOf(':') != -1) {
+        // "T:90,I:120,M:120,R:120,P:120,W:90"
+        int start = 0;
+        while (start < line.length()) {
+            int comma = line.indexOf(',', start);
+            if (comma == -1) comma = line.length();
+            String token = line.substring(start, comma);
+            token.trim();
+            if (token.startsWith("T:")) pcaDriver.setServoAngle(CH_THUMB, token.substring(2).toFloat());
+            else if (token.startsWith("I:")) pcaDriver.setServoAngle(CH_INDEX, token.substring(2).toFloat());
+            else if (token.startsWith("M:")) pcaDriver.setServoAngle(CH_MIDDLE, token.substring(2).toFloat());
+            else if (token.startsWith("R:")) pcaDriver.setServoAngle(CH_RING, token.substring(2).toFloat());
+            else if (token.startsWith("P:")) pcaDriver.setServoAngle(CH_PINKY, token.substring(2).toFloat());
+            else if (token.startsWith("W:")) pcaDriver.setServoAngle(CH_WRIST, token.substring(2).toFloat());
+            start = comma + 1;
+        }
+        Serial.println("OK:ANGLES_UPDATED");
+    }
+}
 
-        if (line.startsWith("POSE:")) {
-            String poseName = line.substring(5);
-            const GesturePose* p = findGesture(poseName);
-            if (p) {
-                for (int i = 0; i < NUM_SERVOS; i++) {
-                    pcaDriver.setServoAngle(i, p->angles[i]);
+static char serialRxBuf[128];
+static uint8_t serialRxPos = 0;
+
+void handleSerialCommands() {
+    while (Serial.available()) {
+        char c = (char)Serial.read();
+        if (c == '\n' || c == '\r') {
+            if (serialRxPos > 0) {
+                serialRxBuf[serialRxPos] = '\0';
+                String line = String(serialRxBuf);
+                line.trim();
+                if (line.length() > 0) {
+                    processSerialLine(line);
                 }
-                Serial.println("OK:POSE_SET");
-            } else {
-                Serial.println("ERR:UNKNOWN_POSE");
+                serialRxPos = 0;
             }
-        } else if (line.indexOf(':') != -1) {
-            // "T:90,I:120,M:120,R:120,P:120,W:90"
-            int start = 0;
-            while (start < line.length()) {
-                int comma = line.indexOf(',', start);
-                if (comma == -1) comma = line.length();
-                String token = line.substring(start, comma);
-                token.trim();
-                if (token.startsWith("T:")) pcaDriver.setServoAngle(CH_THUMB, token.substring(2).toFloat());
-                else if (token.startsWith("I:")) pcaDriver.setServoAngle(CH_INDEX, token.substring(2).toFloat());
-                else if (token.startsWith("M:")) pcaDriver.setServoAngle(CH_MIDDLE, token.substring(2).toFloat());
-                else if (token.startsWith("R:")) pcaDriver.setServoAngle(CH_RING, token.substring(2).toFloat());
-                else if (token.startsWith("P:")) pcaDriver.setServoAngle(CH_PINKY, token.substring(2).toFloat());
-                else if (token.startsWith("W:")) pcaDriver.setServoAngle(CH_WRIST, token.substring(2).toFloat());
-                start = comma + 1;
-            }
-            Serial.println("OK:ANGLES_UPDATED");
+        } else if (serialRxPos < sizeof(serialRxBuf) - 1) {
+            serialRxBuf[serialRxPos++] = c;
         }
     }
 }
 
 void setup() {
     Serial.begin(SERIAL_BAUD_RATE);
+    Serial.setTimeout(10);
     delay(500);
     Serial.println();
     Serial.println("============================================");
