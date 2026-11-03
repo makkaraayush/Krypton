@@ -120,60 +120,36 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     # -------------------------------------------------------------
     # 2-5. INDEX, MIDDLE, RING, PINKY FLEXIONS
     # -------------------------------------------------------------
-    # Distinguishes natural half-bends from full clenched fists.
-    # When fingers bend halfway, fingertips point forward toward the camera.
-    # When fully closed in a fist, fingertips curl tightly around and point DOWN toward the wrist/palm.
-    finger_configs = [
-        # (mcp, pip, dip, tip, open_span, clench_range)
-        (5, 6, 7, 8,    1.05, 0.72),  # Index
-        (9, 10, 11, 12, 1.12, 0.76),  # Middle
-        (13, 14, 15, 16, 1.05, 0.72), # Ring
-        (17, 18, 19, 20, 0.75, 0.52), # Pinky
+    finger_indices = [
+        (5, 6, 7, 8),     # Index: MCP, PIP, DIP, TIP
+        (9, 10, 11, 12),  # Middle
+        (13, 14, 15, 16), # Ring
+        (17, 18, 19, 20)  # Pinky
     ]
 
-    v_wrist = np.array([wrist.x, wrist.y, wrist.z])
+    for mcp, pip, dip, tip in finger_indices:
+        pip_angle = calculate_angle_3d(landmarks[mcp], landmarks[pip], landmarks[dip])
+        ang_flex = np.clip((165.0 - pip_angle) / 95.0, 0.0, 1.0)
 
-    for mcp_idx, pip_idx, dip_idx, tip_idx, open_span, clench_range in finger_configs:
-        v_mcp = np.array([landmarks[mcp_idx].x, landmarks[mcp_idx].y, landmarks[mcp_idx].z])
-        v_pip = np.array([landmarks[pip_idx].x, landmarks[pip_idx].y, landmarks[pip_idx].z])
-        v_dip = np.array([landmarks[dip_idx].x, landmarks[dip_idx].y, landmarks[dip_idx].z])
-        v_tip = np.array([landmarks[tip_idx].x, landmarks[tip_idx].y, landmarks[tip_idx].z])
+        tip_dist = np.linalg.norm([
+            landmarks[tip].x - wrist.x,
+            landmarks[tip].y - wrist.y,
+            landmarks[tip].z - wrist.z
+        ]) / palm_span
 
-        # (a) True 3D PIP & DIP joint curls
-        pip_angle = calculate_angle_3d(landmarks[mcp_idx], landmarks[pip_idx], landmarks[dip_idx])
-        pip_flex = np.clip((165.0 - pip_angle) / 100.0, 0.0, 1.0)
+        # Pinky is naturally shorter (~1.45 max span vs 1.75 for others), so Pinky opens to 0.0 cleanly
+        max_dist = 1.45 if mcp == 17 else 1.75
+        dist_range = 0.75 if mcp == 17 else 0.95
+        dist_flex = np.clip((max_dist - tip_dist) / dist_range, 0.0, 1.0)
 
-        dip_angle = calculate_angle_3d(landmarks[pip_idx], landmarks[dip_idx], landmarks[tip_idx])
-        dip_flex = np.clip((160.0 - dip_angle) / 85.0, 0.0, 1.0)
+        f_raw = 0.55 * ang_flex + 0.45 * dist_flex
 
-        # (b) Downward distal phalanx curl (points down toward wrist when full closed)
-        # Prevents half-curls (pointing at camera) from registering as full clenched fists
-        vec_down = v_wrist - v_mcp
-        norm_down = np.linalg.norm(vec_down)
-        u_down = vec_down / (norm_down if norm_down > 1e-4 else 1.0)
-
-        vec_tip = v_tip - v_dip
-        norm_tip = np.linalg.norm(vec_tip)
-        u_tip = vec_tip / (norm_tip if norm_tip > 1e-4 else 1.0)
-
-        down_align = np.dot(u_tip, u_down)
-        # Open: down_align ~ -1.0; Half-curl: down_align ~ -0.2; Full fist: down_align ~ +0.8
-        down_curl = np.clip((down_align - (-0.60)) / 1.35, 0.0, 1.0)
-
-        # (c) Tip-to-MCP Distance (normalized by palm_span)
-        tip_mcp_dist = np.linalg.norm(v_tip - v_mcp) / palm_span
-        dist_flex = np.clip((open_span - tip_mcp_dist) / clench_range, 0.0, 1.0)
-
-        # Proportional balanced combination:
-        # Joint curls + downward fold dominate; distance provides continuous baseline
-        f_raw = 0.35 * pip_flex + 0.25 * dip_flex + 0.25 * down_curl + 0.15 * dist_flex
-
-        if f_raw < 0.06:
+        if f_raw < 0.08:
             f_norm = 0.0
         else:
-            f_norm = np.clip((f_raw - 0.06) / 0.88, 0.0, 1.0)
+            f_norm = (f_raw - 0.08) / 0.92
 
-        flexions.append(float(f_norm))
+        flexions.append(float(np.clip(f_norm, 0.0, 1.0)))
 
     return flexions
 
