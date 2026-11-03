@@ -320,13 +320,12 @@ void applyPose(const char* name, float t, float i, float m, float r, float p, fl
     // 1. Set wrist first
     writeAngleHardware(5, w, false);
 
-    // 2. Conflict: Index or Middle wants to OPEN (< 50 deg), but Thumb is closed across palm (> 40 deg)
+    // 2. Conflict: Index is OPENING (< 50 deg) while Thumb is currently closed across palm (> 40 deg)
     bool indexOpening = (i < 50.0f && currentAngles[1] > 50.0f);
-    bool midOpening   = (m < 50.0f && currentAngles[2] > 50.0f);
     bool thumbClamped = (currentAngles[0] > 40.0f);
 
-    if ((indexOpening || midOpening) && thumbClamped) {
-        Serial.println("  -> [SAFE-SEQ] Unclamping Thumb to 30 deg first to prevent index/middle snag...");
+    if (indexOpening && thumbClamped) {
+        Serial.println("  -> [SAFE-SEQ] Unclamping Thumb to 30 deg first to prevent index snag...");
         for (float ang = currentAngles[0]; ang >= 30.0f; ang -= 5.0f) {
             writeAngleHardware(0, ang, false);
             delay(15);
@@ -334,18 +333,16 @@ void applyPose(const char* name, float t, float i, float m, float r, float p, fl
         writeAngleHardware(0, 30.0f, false);
         delay(80);
 
-        Serial.println("  -> [SAFE-SEQ] Extending fingers freely past clearance zone...");
-        float maxFinger = max(currentAngles[1], currentAngles[2]);
-        for (float ang = maxFinger; ang >= 0.0f; ang -= 5.0f) {
-            if (indexOpening && ang >= i) writeAngleHardware(1, ang, false);
-            if (midOpening && ang >= m)   writeAngleHardware(2, ang, false);
+        Serial.println("  -> [SAFE-SEQ] Extending index freely past clearance zone...");
+        for (float ang = currentAngles[1]; ang >= i; ang -= 5.0f) {
+            writeAngleHardware(1, ang, false);
             delay(15);
         }
         writeAngleHardware(1, i, false);
-        writeAngleHardware(2, m, false);
         delay(60);
 
-        // Move Ring and Pinky
+        // Move other fingers (Middle, Ring, Pinky)
+        writeAngleHardware(2, m, false);
         writeAngleHardware(3, r, false);
         writeAngleHardware(4, p, false);
 
@@ -362,13 +359,13 @@ void applyPose(const char* name, float t, float i, float m, float r, float p, fl
         return;
     }
 
-    // 3. Conflict: Forming a FIST or fingers tightening while Thumb is already closed
-    bool fingersClosing = (i > 100.0f || m > 100.0f);
-    bool thumbClosing   = (t > 100.0f);
-    if (fingersClosing && thumbClosing) {
-        // If thumb is already folded into palm, yield it to 30 deg so fingers can curl in first
-        if (currentAngles[0] > 40.0f && (currentAngles[1] < 85.0f || currentAngles[2] < 85.0f)) {
-            Serial.println("  -> [SAFE-SEQ] Thumb is parked in palm! Yielding Thumb to 30 deg so fingers can curl in...");
+    // 3. Conflict: Forming a FIST or Index tightening while Thumb is already closed in palm
+    bool indexClosing = (i > 100.0f && currentAngles[1] < 70.0f);
+    bool thumbClosing = (t > 100.0f);
+    if (indexClosing && thumbClosing) {
+        // If thumb is already folded into palm, yield it to 30 deg so index can curl in first
+        if (currentAngles[0] > 40.0f) {
+            Serial.println("  -> [SAFE-SEQ] Thumb is parked in palm! Yielding Thumb to 30 deg so index can curl in...");
             for (float ang = currentAngles[0]; ang >= 30.0f; ang -= 5.0f) {
                 writeAngleHardware(0, ang, false);
                 delay(15);
@@ -398,6 +395,9 @@ void applyPose(const char* name, float t, float i, float m, float r, float p, fl
             delay(15);
         }
         writeAngleHardware(0, t, false);
+        Serial.printf("[*] Pose [%s] applied cleanly (Thumb wrapped outside, full tightness).\n", name);
+        return;
+    }
         Serial.printf("[*] Pose [%s] applied cleanly (Thumb wrapped outside, full tightness).\n", name);
         return;
     }

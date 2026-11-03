@@ -1,0 +1,39 @@
+{
+  "thumb": {
+    "min_angle": 0.0,
+    "mid_angle": 85.0,
+    "max_angle": 180.0,
+    "exponent": 1.25
+  },
+  "index": {
+    "min_angle": 0.0,
+    "mid_angle": 85.0,
+    "max_angle": 180.0,
+    "exponent": 1.35
+  },
+  "middle": {
+    "min_angle": 0.0,
+    "mid_angle": 85.0,
+    "max_angle": 180.0,
+    "exponent": 1.3
+  },
+  "ring": {
+    "min_angle": 0.0,
+    "mid_angle": 80.0,
+    "max_angle": 180.0,
+    "exponent": 1.25
+  },
+  "pinky": {
+    "min_angle": 0.0,
+    "mid_angle": 80.0,
+    "max_angle": 180.0,
+    "exponent": 1.25
+  },
+  "wrist": {
+    "min_angle": 0.0,
+    "mid_angle": 90.0,
+    "max_angle": 180.0,
+    "exponent": 1.0
+  }
+}
+

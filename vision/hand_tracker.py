@@ -2,14 +2,20 @@
 Krypton Hand Tracking Pipeline
 Uses MediaPipe Hands and OpenCV to track user hand articulation, compute 6-channel
 kinematics (5 fingers + wrist rotation), and stream low-latency commands to the ESP32 controller.
-Supports auto-detection of USB Serial and Wi-Fi UDP.
+Supports auto-detection of USB Serial and Wi-Fi UDP, and progressive calibration curve profiles.
 """
 
 import sys
+import os
 import time
 import argparse
 import numpy as np
 import cv2
+
+# Ensure local imports work whether executed from repo root or vision folder
+_VISION_DIR = os.path.dirname(os.path.abspath(__file__))
+if _VISION_DIR not in sys.path:
+    sys.path.insert(0, _VISION_DIR)
 
 try:
     import mediapipe as mp
@@ -19,6 +25,7 @@ except ImportError:
 
 from communicator import ArmCommunicator
 from visualizer import CyberHud
+import calibration
 
 
 def calculate_angle_3d(a, b, c):
@@ -40,7 +47,7 @@ def calculate_angle_3d(a, b, c):
 def compute_finger_flexions(landmarks, is_right_hand=True):
     """
     Computes normalized flexion (0.0 = fully open, 1.0 = fully clenched)
-    and maps to servo degrees (0 to 180).
+    for Thumb and 4 fingers based on true 3D joint curl and knuckle proximity.
     """
     wrist = landmarks[0]
     index_mcp = landmarks[5]
@@ -55,34 +62,38 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
 
     flexions = []
 
-    # 1. THUMB FLEXION
-    ip_angle = calculate_angle_3d(landmarks[2], landmarks[3], landmarks[4])
-    ip_curl = np.clip((160.0 - ip_angle) / 50.0, 0.0, 1.0)
-
-    mcp_angle = calculate_angle_3d(landmarks[1], landmarks[2], landmarks[3])
-    mcp_curl = np.clip((152.0 - mcp_angle) / 45.0, 0.0, 1.0)
-
-    pinky_dist = np.linalg.norm([
-        landmarks[4].x - landmarks[17].x,
-        landmarks[4].y - landmarks[17].y,
-        landmarks[4].z - landmarks[17].z
+    # -------------------------------------------------------------
+    # 1. THUMB FLEXION (Natural fold + curl)
+    # -------------------------------------------------------------
+    # (a) Knuckle proximity: distance from Thumb Tip (4) to Index MCP (5)
+    index_knuckle_dist = np.linalg.norm([
+        landmarks[4].x - landmarks[5].x,
+        landmarks[4].y - landmarks[5].y,
+        landmarks[4].z - landmarks[5].z
     ]) / palm_span
-    opp_flex = np.clip((1.05 - pinky_dist) / 0.55, 0.0, 1.0)
+    # When open/extended: dist ~ 0.8-1.1; when curled/folded: dist drops to ~0.3-0.45
+    fold_flex = np.clip((0.85 - index_knuckle_dist) / 0.50, 0.0, 1.0)
 
-    joint_curl = max(ip_curl, 0.6 * ip_curl + 0.4 * mcp_curl)
-    if joint_curl < 0.12 and opp_flex < 0.35:
-        thumb_flex = 0.0
+    # (b) IP joint curl (landmarks 2 -> 3 -> 4)
+    ip_angle = calculate_angle_3d(landmarks[2], landmarks[3], landmarks[4])
+    ip_curl = np.clip((165.0 - ip_angle) / 60.0, 0.0, 1.0)
+
+    # (c) MCP joint curl (landmarks 1 -> 2 -> 3)
+    mcp_angle = calculate_angle_3d(landmarks[1], landmarks[2], landmarks[3])
+    mcp_curl = np.clip((155.0 - mcp_angle) / 50.0, 0.0, 1.0)
+
+    # Natural blend: folds smoothly when closing thumb into fist or pinch
+    thumb_raw = 0.50 * fold_flex + 0.35 * ip_curl + 0.15 * mcp_curl
+    if thumb_raw < 0.08:
+        thumb_norm = 0.0
     else:
-        thumb_flex = 0.5 * joint_curl + 0.5 * opp_flex
+        thumb_norm = (thumb_raw - 0.08) / 0.92
 
-    if thumb_flex < 0.10:
-        thumb_flex = 0.0
-    else:
-        thumb_flex = (thumb_flex - 0.10) / 0.90
+    flexions.append(float(np.clip(thumb_norm, 0.0, 1.0)))
 
-    flexions.append(float(np.clip(thumb_flex, 0.0, 1.0)))
-
+    # -------------------------------------------------------------
     # 2-5. INDEX, MIDDLE, RING, PINKY FLEXIONS
+    # -------------------------------------------------------------
     finger_indices = [
         (5, 6, 7, 8),     # Index: MCP, PIP, DIP, TIP
         (9, 10, 11, 12),  # Middle
@@ -130,7 +141,6 @@ def compute_wrist_roll(landmarks) -> float:
     roll_deg = np.degrees(roll_rad)
 
     # Center around horizontal (roll_deg ~ 0 when palm flat in mirrored view)
-    # Map tilt from -50 deg to +50 deg into 0 to 180 deg
     wrist_target = 90.0 + np.clip(roll_deg * 1.5, -90.0, 90.0)
     return float(np.clip(wrist_target, 0.0, 180.0))
 
@@ -147,6 +157,10 @@ def main():
     parser.add_argument("--wrist", action="store_true", default=False, help="Enable live wrist roll tracking on boot")
     args = parser.parse_args()
 
+    # Load custom calibration profile
+    profile = calibration.load_profile()
+    channel_keys = calibration.CHANNEL_KEYS
+
     print("==================================================")
     print("      KRYPTON REAL-TIME VISION TELEOPERATION      ")
     print("==================================================")
@@ -157,6 +171,7 @@ def main():
     print(f"[*] Camera Index   : {args.cam}")
     print(f"[*] Mirror Display : {args.mirror}")
     print(f"[*] Wrist Tracking : {'ON' if args.wrist else 'LOCKED (90 deg)'}")
+    print(f"[*] Calibration    : Loaded progressive curve profile")
     print("--------------------------------------------------")
 
     cap = cv2.VideoCapture(args.cam)
@@ -236,9 +251,10 @@ def main():
                         denom = max(1.0 - zero_offsets[i], 0.01)
                         calibrated_flexions[i] = float(np.clip(val / denom, 0.0, 1.0))
 
-                    # Map 0.0 - 1.0 to 0 - 180 degrees with EMA filter
+                    # Progressive non-linear angle conversion using calibrated profile
                     for i in range(5):
-                        target_deg = calibrated_flexions[i] * 180.0
+                        ch_key = channel_keys[i]
+                        target_deg = calibration.map_flexion_to_angle(calibrated_flexions[i], profile[ch_key])
                         smoothed_angles[i] = alpha * target_deg + (1.0 - alpha) * smoothed_angles[i]
 
                     # Wrist roll tracking

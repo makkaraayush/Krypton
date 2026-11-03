@@ -99,46 +99,23 @@ public:
 #if ENABLE_COLLISION_AVOIDANCE
         float thumbCur = _current_angles[CH_THUMB];
         float indexCur = _current_angles[CH_INDEX];
-        float midCur   = _current_angles[CH_MIDDLE];
         float indexTgt = _target_angles[CH_INDEX];
-        float midTgt   = _target_angles[CH_MIDDLE];
         float thumbTgt = _target_angles[CH_THUMB];
 
-        // 1. Conflict: Index or Middle wants to OPEN (< FINGER_CLEARANCE_ANGLE),
-        // but Thumb is currently in the collision overlap zone (> THUMB_CLEARANCE_ANGLE)
-        bool indexWantsOpen = (indexTgt < FINGER_CLEARANCE_ANGLE && indexCur > FINGER_CLEARANCE_ANGLE);
-        bool midWantsOpen   = (midTgt < FINGER_CLEARANCE_ANGLE && midCur > FINGER_CLEARANCE_ANGLE);
-        bool thumbIsOver    = (thumbCur > THUMB_CLEARANCE_ANGLE);
-
-        if ((indexWantsOpen || midWantsOpen) && thumbIsOver) {
-            // Prioritize yielding the thumb to clearance angle first
+        // 1. Conflict: Index wants to OPEN (< 45 deg) while Thumb is currently clamped across the palm (> 35 deg)
+        // Yield thumb outward first so index has a free swing path without tension snag
+        if (indexTgt < FINGER_CLEARANCE_ANGLE && indexCur > FINGER_CLEARANCE_ANGLE && thumbCur > THUMB_CLEARANCE_ANGLE) {
             effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
-
-            // Hold Index & Middle from forcing past collision threshold until thumb clears
-            if (thumbCur > THUMB_CLEARANCE_ANGLE + 8.0f) {
-                if (indexWantsOpen) effective_targets[CH_INDEX] = max(indexCur, COLLISION_ZONE_MIN);
-                if (midWantsOpen)   effective_targets[CH_MIDDLE] = max(midCur, COLLISION_ZONE_MIN);
+            // Hold index from pulling hard against clamped thumb until thumb clears past 42 deg
+            if (thumbCur > THUMB_CLEARANCE_ANGLE + 7.0f) {
+                effective_targets[CH_INDEX] = max(indexCur, COLLISION_ZONE_MIN);
             }
         }
-        // 2. Conflict: Fingers trying to TIGHTEN into palm while Thumb is already parked in palm
-        // Yield Thumb briefly to clearance so fingers can curl fully into palm, then Thumb clamps outside tightly
-        else if ((indexTgt > 100.0f || midTgt > 100.0f) && (indexCur < 85.0f || midCur < 85.0f) && thumbCur > THUMB_CLEARANCE_ANGLE) {
+        // 2. Conflict: Index is actively CLOSING into the palm (< 65 deg currently, targeting > 100 deg)
+        // while Thumb is already closed across the palm (> 35 deg).
+        // Yield thumb briefly so index can curl inside the palm first, then Thumb clamps outside tightly
+        else if (indexTgt > 100.0f && indexCur < 65.0f && thumbCur > THUMB_CLEARANCE_ANGLE) {
             effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
-        }
-        // 3. Natural Fist Formation: Fingers closing to palm while Thumb wants to fold closed
-        // Ensure fingers curl in first, then Thumb wraps outside
-        else if (indexTgt > 100.0f && thumbTgt > 100.0f && (indexCur < 85.0f || midCur < 85.0f)) {
-            effective_targets[CH_THUMB] = min(thumbCur, THUMB_CLEARANCE_ANGLE + 5.0f);
-        }
-        // 4. Conflict: Thumb trapped underneath and wants to open (< THUMB_CLEARANCE_ANGLE),
-        // while Index or Middle is clamped over it (> 80 deg)
-        else if (thumbTgt < THUMB_CLEARANCE_ANGLE && thumbCur > THUMB_CLEARANCE_ANGLE) {
-            bool fingersClampedOver = (indexCur > 80.0f || midCur > 80.0f);
-            if (fingersClampedOver && (indexTgt > 80.0f || midTgt > 80.0f)) {
-                // Temporarily yield fingers slightly to ~65 deg so thumb can slide free
-                if (indexCur > 70.0f) effective_targets[CH_INDEX] = 65.0f;
-                if (midCur > 70.0f)   effective_targets[CH_MIDDLE] = 65.0f;
-            }
         }
 #endif
 
