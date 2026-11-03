@@ -79,11 +79,21 @@ const float WRIST_COMP_COEFFS[5] = { -0.10f, -0.05f, 0.00f, 0.08f, 0.15f }; // T
 #define SERIAL_BAUD_RATE    115200
 
 // ==========================================
-// Motion Smoothing / Trajectory Generator
+// Motion Smoothing & Collision Avoidance
 // ==========================================
 // Prevents abrupt jerk and tendon snaps by stepping current angle towards target
-#define MOTION_SMOOTHING        true
-#define TRAJECTORY_STEP_DEG     3.5f    // Maximum degrees moved per interpolation step
-#define TRAJECTORY_INTERVAL_MS  15      // Easing loop update interval (~66 Hz)
+#define MOTION_SMOOTHING             true
+#define TRAJECTORY_STEP_DEG          3.5f    // Maximum degrees moved per interpolation step (~230 deg/sec)
+#define TRAJECTORY_INTERVAL_MS       15      // Easing loop update interval (~66 Hz)
+
+// Intelligent Thumb & Finger Collision Avoidance
+// Prevents mechanical entrapment when transitioning between FIST, POINT, and OPEN poses:
+// 1. If Index/Middle is opening from under a clamped thumb, Thumb yields to clearance angle first.
+// 2. When forming a fist, fingers curl into the palm first before Thumb folds over the outside.
+// 3. If Thumb is trapped under curled fingers and wants to open, fingers yield clearance first.
+#define ENABLE_COLLISION_AVOIDANCE   true
+#define THUMB_CLEARANCE_ANGLE        35.0f   // Safe clearance angle for thumb to unclamp fingers
+#define FINGER_CLEARANCE_ANGLE       45.0f   // Angle below which index/middle are considered cleared
+#define COLLISION_ZONE_MIN           50.0f   // Minimum angle where thumb and fingers physically overlap
 
 #endif // CONFIG_H

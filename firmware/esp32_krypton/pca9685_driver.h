@@ -90,11 +90,62 @@ public:
         if (now - _last_update_ms < TRAJECTORY_INTERVAL_MS) return;
         _last_update_ms = now;
 
+        // Compute effective intermediate setpoints with collision arbitration
+        float effective_targets[NUM_SERVOS];
         for (int i = 0; i < NUM_SERVOS; i++) {
-            float diff = _target_angles[i] - _current_angles[i];
+            effective_targets[i] = _target_angles[i];
+        }
+
+#if ENABLE_COLLISION_AVOIDANCE
+        float thumbCur = _current_angles[CH_THUMB];
+        float indexCur = _current_angles[CH_INDEX];
+        float midCur   = _current_angles[CH_MIDDLE];
+        float indexTgt = _target_angles[CH_INDEX];
+        float midTgt   = _target_angles[CH_MIDDLE];
+        float thumbTgt = _target_angles[CH_THUMB];
+
+        // 1. Conflict: Index or Middle wants to OPEN (< FINGER_CLEARANCE_ANGLE),
+        // but Thumb is currently in the collision overlap zone (> THUMB_CLEARANCE_ANGLE)
+        bool indexWantsOpen = (indexTgt < FINGER_CLEARANCE_ANGLE && indexCur > FINGER_CLEARANCE_ANGLE);
+        bool midWantsOpen   = (midTgt < FINGER_CLEARANCE_ANGLE && midCur > FINGER_CLEARANCE_ANGLE);
+        bool thumbIsOver    = (thumbCur > THUMB_CLEARANCE_ANGLE);
+
+        if ((indexWantsOpen || midWantsOpen) && thumbIsOver) {
+            // Prioritize yielding the thumb to clearance angle first
+            effective_targets[CH_THUMB] = THUMB_CLEARANCE_ANGLE;
+
+            // Hold Index & Middle from forcing past collision threshold until thumb clears
+            if (thumbCur > THUMB_CLEARANCE_ANGLE + 8.0f) {
+                if (indexWantsOpen) effective_targets[CH_INDEX] = max(indexCur, COLLISION_ZONE_MIN);
+                if (midWantsOpen)   effective_targets[CH_MIDDLE] = max(midCur, COLLISION_ZONE_MIN);
+            }
+        }
+        // 2. Conflict: Fingers closing to palm while Thumb wants to fold closed (FIST formation)
+        // Ensure fingers curl in first, then Thumb wraps outside
+        else if (indexTgt > 100.0f && thumbTgt > 100.0f) {
+            bool fingersStillCurling = (indexCur < 85.0f || midCur < 85.0f);
+            if (fingersStillCurling && thumbCur < 100.0f) {
+                // Hold Thumb at clearance angle until fingers curl inside palm
+                effective_targets[CH_THUMB] = min(thumbCur, THUMB_CLEARANCE_ANGLE + 5.0f);
+            }
+        }
+        // 3. Conflict: Thumb trapped underneath and wants to open (< THUMB_CLEARANCE_ANGLE),
+        // while Index or Middle is clamped over it (> 80 deg)
+        else if (thumbTgt < THUMB_CLEARANCE_ANGLE && thumbCur > THUMB_CLEARANCE_ANGLE) {
+            bool fingersClampedOver = (indexCur > 80.0f || midCur > 80.0f);
+            if (fingersClampedOver && (indexTgt > 80.0f || midTgt > 80.0f)) {
+                // Temporarily yield fingers slightly to ~65 deg so thumb can slide free
+                if (indexCur > 70.0f) effective_targets[CH_INDEX] = 65.0f;
+                if (midCur > 70.0f)   effective_targets[CH_MIDDLE] = 65.0f;
+            }
+        }
+#endif
+
+        for (int i = 0; i < NUM_SERVOS; i++) {
+            float diff = effective_targets[i] - _current_angles[i];
             if (abs(diff) > 0.1f) {
                 if (abs(diff) <= TRAJECTORY_STEP_DEG) {
-                    _current_angles[i] = _target_angles[i];
+                    _current_angles[i] = effective_targets[i];
                 } else {
                     _current_angles[i] += (diff > 0 ? TRAJECTORY_STEP_DEG : -TRAJECTORY_STEP_DEG);
                 }
