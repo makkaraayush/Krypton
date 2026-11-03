@@ -120,8 +120,9 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     # -------------------------------------------------------------
     # 2-5. INDEX, MIDDLE, RING, PINKY FLEXIONS
     # -------------------------------------------------------------
-    # Uses monotonic tip-to-MCP distance and PIP/DIP joint angles.
-    # Eliminates the full-clench inversion artifact where measuring to wrist dropped on tight fists.
+    # Uses self-normalizing anatomical finger segment lengths (MCP->PIP->DIP->TIP).
+    # Adapts automatically to individual finger sizes so shorter fingers like the Pinky
+    # achieve true 0.0 when fully open and solid 1.0 when clenched into a fist.
     finger_indices = [
         (5, 6, 7, 8),     # Index: MCP, PIP, DIP, TIP
         (9, 10, 11, 12),  # Middle
@@ -130,22 +131,38 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     ]
 
     for mcp_idx, pip_idx, dip_idx, tip_idx in finger_indices:
-        v_mcp = np.array([landmarks[mcp_idx].x, landmarks[mcp_idx].y, landmarks[mcp_idx].z])
-        v_tip = np.array([landmarks[tip_idx].x, landmarks[tip_idx].y, landmarks[tip_idx].z])
+        p_mcp = landmarks[mcp_idx]
+        p_pip = landmarks[pip_idx]
+        p_dip = landmarks[dip_idx]
+        p_tip = landmarks[tip_idx]
 
-        # (a) Monotonic Tip-to-MCP Distance
-        # Open: tip is ~ 1.0 to 1.3 palm spans from MCP.
-        # Tight fist: tip curls right into MCP / palm surface ~ 0.22 to 0.35 palm spans.
-        # This distance is strictly monotonic: squeezing tighter NEVER increases distance.
-        tip_mcp_dist = np.linalg.norm(v_tip - v_mcp) / palm_span
-        dist_flex = np.clip((1.05 - tip_mcp_dist) / 0.70, 0.0, 1.0)
+        v_mcp = np.array([p_mcp.x, p_mcp.y, p_mcp.z])
+        v_pip = np.array([p_pip.x, p_pip.y, p_pip.z])
+        v_dip = np.array([p_dip.x, p_dip.y, p_dip.z])
+        v_tip = np.array([p_tip.x, p_tip.y, p_tip.z])
 
-        # (b) PIP joint angle
-        pip_angle = calculate_angle_3d(landmarks[mcp_idx], landmarks[pip_idx], landmarks[dip_idx])
+        # Self-normalized anatomical finger bone length:
+        # Sum of the 3 phalanx segments: (MCP->PIP) + (PIP->DIP) + (DIP->TIP)
+        # Dynamically scales to each finger's physical proportions, eliminating open-pinky offsets
+        seg_prox = np.linalg.norm(v_pip - v_mcp)
+        seg_mid  = np.linalg.norm(v_dip - v_pip)
+        seg_dist = np.linalg.norm(v_tip - v_dip)
+        finger_full_len = seg_prox + seg_mid + seg_dist
+        if finger_full_len < 1e-4:
+            finger_full_len = palm_span
+
+        # Distance from Tip to MCP relative to the finger's own total extended length:
+        # Fully open / extended straight: extension_ratio is ~ 0.94 - 1.0 (for ALL fingers)
+        # Closed in a fist: extension_ratio drops to ~ 0.22 - 0.35
+        extension_ratio = np.linalg.norm(v_tip - v_mcp) / finger_full_len
+        dist_flex = np.clip((0.92 - extension_ratio) / 0.60, 0.0, 1.0)
+
+        # PIP joint curl (knuckle bend)
+        pip_angle = calculate_angle_3d(p_mcp, p_pip, p_dip)
         pip_flex = np.clip((165.0 - pip_angle) / 95.0, 0.0, 1.0)
 
-        # (c) DIP joint angle
-        dip_angle = calculate_angle_3d(landmarks[pip_idx], landmarks[dip_idx], landmarks[tip_idx])
+        # DIP joint curl
+        dip_angle = calculate_angle_3d(p_pip, p_dip, p_tip)
         dip_flex = np.clip((160.0 - dip_angle) / 75.0, 0.0, 1.0)
 
         f_raw = 0.50 * dist_flex + 0.35 * pip_flex + 0.15 * dip_flex
@@ -153,10 +170,31 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
         if f_raw < 0.08:
             f_norm = 0.0
         else:
-            # Reaches solid 1.0 (180 deg) at f_raw >= 0.80 and STAYS at 1.0 under tightest fist squeeze
-            f_norm = np.clip((f_raw - 0.08) / 0.72, 0.0, 1.0)
+            # Reaches solid 1.0 (180 deg) at f_raw >= 0.78 and STAYS at 1.0 under tightest fist squeeze
+            f_norm = np.clip((f_raw - 0.08) / 0.70, 0.0, 1.0)
 
         flexions.append(float(f_norm))
+
+    # -------------------------------------------------------------
+    # THUMB-OVER-INDEX OCCLUSION COMPENSATION
+    # -------------------------------------------------------------
+    # When the thumb folds horizontally over the index finger in a fist:
+    # Camera vision occludes the index DIP/TIP, which can cause MediaPipe to misestimate
+    # occluded index landmarks and falsely drop index angle from 180 deg to ~150 deg.
+    # If the thumb is wrapped across the palm (thumb_norm > 0.40) and covering index,
+    # and either index was already curled or middle finger is closed in a fist,
+    # clamp index solidly to 1.0 (180 deg).
+    thumb_val = flexions[0]
+    index_val = flexions[1]
+    mid_val   = flexions[2]
+
+    if thumb_val > 0.40 and horiz_progress > 0.35:
+        dist_thumb_to_index_pip = np.linalg.norm(v_thumb_tip - v_index_pip) / palm_span
+        if dist_thumb_to_index_pip < 0.48:
+            # Thumb is directly covering the index finger
+            if index_val > 0.65 or mid_val > 0.70:
+                # Index is curled in a fist under the thumb -> lock to 1.0 (180 deg)
+                flexions[1] = 1.0
 
     return flexions
 
