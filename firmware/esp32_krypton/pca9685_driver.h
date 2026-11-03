@@ -121,11 +121,15 @@ public:
 
         for (int i = 0; i < NUM_SERVOS; i++) {
             float diff = effective_targets[i] - _current_angles[i];
-            if (abs(diff) > 0.1f) {
-                if (abs(diff) <= TRAJECTORY_STEP_DEG) {
+            float absDiff = abs(diff);
+            if (absDiff > 0.1f) {
+                // Adaptive step: large movements accelerate dynamically (up to 25 deg per step = 2500 deg/sec)
+                // Small movements step smoothly to avoid overshoot and buzzing
+                float dynamicStep = max(TRAJECTORY_STEP_DEG, absDiff * 0.45f);
+                if (absDiff <= dynamicStep) {
                     _current_angles[i] = effective_targets[i];
                 } else {
-                    _current_angles[i] += (diff > 0 ? TRAJECTORY_STEP_DEG : -TRAJECTORY_STEP_DEG);
+                    _current_angles[i] += (diff > 0 ? dynamicStep : -dynamicStep);
                 }
                 writeAngleHardware(i, _current_angles[i], true);
             }

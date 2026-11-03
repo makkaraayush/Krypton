@@ -47,7 +47,7 @@ def calculate_angle_3d(a, b, c):
 def compute_finger_flexions(landmarks, is_right_hand=True):
     """
     Computes normalized flexion (0.0 = fully open, 1.0 = fully clenched)
-    for Thumb and 4 fingers based on true 3D joint curl and knuckle proximity.
+    for Thumb and 4 fingers based on true 3D horizontal kinematics and knuckle curl.
     """
     wrist = landmarks[0]
     index_mcp = landmarks[5]
@@ -63,37 +63,65 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
     flexions = []
 
     # -------------------------------------------------------------
-    # 1. THUMB FLEXION (Natural fold + curl)
+    # 1. THUMB FLEXION (Horizontal Sweep Across the Fingers)
     # -------------------------------------------------------------
-    # (a) Knuckle proximity: distance from Thumb Tip (4) to Index MCP (5)
-    index_knuckle_dist = np.linalg.norm([
-        landmarks[4].x - landmarks[5].x,
-        landmarks[4].y - landmarks[5].y,
-        landmarks[4].z - landmarks[5].z
-    ]) / palm_span
-    # When open/extended: dist ~ 0.8-1.1; when curled/folded: dist drops to ~0.3-0.45
-    fold_flex = np.clip((0.85 - index_knuckle_dist) / 0.50, 0.0, 1.0)
+    # Human thumb does not fold down into the base; it sweeps horizontally
+    # across the front/outside of the curled fingers toward the pinky side.
+    v_index_mcp = np.array([landmarks[5].x, landmarks[5].y, landmarks[5].z])
+    v_pinky_mcp = np.array([landmarks[17].x, landmarks[17].y, landmarks[17].z])
+    v_thumb_tip = np.array([landmarks[4].x, landmarks[4].y, landmarks[4].z])
+    v_thumb_mcp = np.array([landmarks[2].x, landmarks[2].y, landmarks[2].z])
+    v_index_pip = np.array([landmarks[6].x, landmarks[6].y, landmarks[6].z])
+    v_middle_pip = np.array([landmarks[10].x, landmarks[10].y, landmarks[10].z])
 
-    # (b) IP joint curl (landmarks 2 -> 3 -> 4)
+    # Across-palm vector pointing horizontally from Index MCP toward Pinky MCP
+    vec_across = v_pinky_mcp - v_index_mcp
+    norm_across = np.linalg.norm(vec_across)
+    u_across = vec_across / (norm_across if norm_across > 1e-4 else 1.0)
+
+    # (a) Horizontal progress: projection of Thumb Tip relative to Index MCP
+    # When open/extended: Thumb Tip is to the outside (negative projection, ~ -0.6 to -0.8 palm spans)
+    # When neutral/adjacent: projection is ~ -0.1 to 0.0
+    # When folded across fingers (fist): Thumb Tip reaches across Index/Middle (positive projection, ~ +0.15 to +0.40)
+    proj_across = np.dot(v_thumb_tip - v_index_mcp, u_across) / palm_span
+    horiz_progress = np.clip((proj_across - (-0.45)) / 0.70, 0.0, 1.0)
+
+    # (b) Proximity above the fingers:
+    # When forming a fist, Thumb wraps above the fingers (near midpoint of Index PIP & Middle PIP)
+    fingers_mid = 0.5 * (v_index_pip + v_middle_pip)
+    dist_over_fingers = np.linalg.norm(v_thumb_tip - fingers_mid) / palm_span
+    # Open: dist ~ 0.85-1.2. Clamped over fingers: dist drops to ~ 0.18-0.35.
+    prox_progress = np.clip((0.85 - dist_over_fingers) / 0.55, 0.0, 1.0)
+
+    # (c) Thumb vector horizontal alignment:
+    # Vector from Thumb MCP to Thumb Tip rotates from pointing outward to pointing across toward Pinky
+    t_vec = v_thumb_tip - v_thumb_mcp
+    t_norm = np.linalg.norm(t_vec)
+    if t_norm > 1e-4:
+        align_progress = np.clip((np.dot(t_vec / t_norm, u_across) - (-0.25)) / 0.85, 0.0, 1.0)
+    else:
+        align_progress = 0.0
+
+    # (d) Thumb IP joint curl (landmarks 2 -> 3 -> 4)
     ip_angle = calculate_angle_3d(landmarks[2], landmarks[3], landmarks[4])
-    ip_curl = np.clip((165.0 - ip_angle) / 60.0, 0.0, 1.0)
+    ip_curl = np.clip((165.0 - ip_angle) / 55.0, 0.0, 1.0)
 
-    # (c) MCP joint curl (landmarks 1 -> 2 -> 3)
-    mcp_angle = calculate_angle_3d(landmarks[1], landmarks[2], landmarks[3])
-    mcp_curl = np.clip((155.0 - mcp_angle) / 50.0, 0.0, 1.0)
+    # Combined thumb flexion: prioritizes horizontal travel across the palm and resting over fingers
+    thumb_raw = 0.45 * horiz_progress + 0.30 * prox_progress + 0.15 * align_progress + 0.10 * ip_curl
 
-    # Natural blend: folds smoothly when closing thumb into fist or pinch
-    thumb_raw = 0.50 * fold_flex + 0.35 * ip_curl + 0.15 * mcp_curl
     if thumb_raw < 0.08:
         thumb_norm = 0.0
     else:
-        thumb_norm = (thumb_raw - 0.08) / 0.92
+        # Reaches 1.0 smoothly at full horizontal fist fold (thumb_raw >= 0.78)
+        thumb_norm = np.clip((thumb_raw - 0.08) / 0.70, 0.0, 1.0)
 
-    flexions.append(float(np.clip(thumb_norm, 0.0, 1.0)))
+    flexions.append(float(thumb_norm))
 
     # -------------------------------------------------------------
     # 2-5. INDEX, MIDDLE, RING, PINKY FLEXIONS
     # -------------------------------------------------------------
+    # Uses monotonic tip-to-MCP distance and PIP/DIP joint angles.
+    # Eliminates the full-clench inversion artifact where measuring to wrist dropped on tight fists.
     finger_indices = [
         (5, 6, 7, 8),     # Index: MCP, PIP, DIP, TIP
         (9, 10, 11, 12),  # Middle
@@ -101,25 +129,34 @@ def compute_finger_flexions(landmarks, is_right_hand=True):
         (17, 18, 19, 20)  # Pinky
     ]
 
-    for mcp, pip, dip, tip in finger_indices:
-        pip_angle = calculate_angle_3d(landmarks[mcp], landmarks[pip], landmarks[dip])
-        ang_flex = np.clip((165.0 - pip_angle) / 95.0, 0.0, 1.0)
+    for mcp_idx, pip_idx, dip_idx, tip_idx in finger_indices:
+        v_mcp = np.array([landmarks[mcp_idx].x, landmarks[mcp_idx].y, landmarks[mcp_idx].z])
+        v_tip = np.array([landmarks[tip_idx].x, landmarks[tip_idx].y, landmarks[tip_idx].z])
 
-        tip_dist = np.linalg.norm([
-            landmarks[tip].x - wrist.x,
-            landmarks[tip].y - wrist.y,
-            landmarks[tip].z - wrist.z
-        ]) / palm_span
-        dist_flex = np.clip((1.75 - tip_dist) / 0.95, 0.0, 1.0)
+        # (a) Monotonic Tip-to-MCP Distance
+        # Open: tip is ~ 1.0 to 1.3 palm spans from MCP.
+        # Tight fist: tip curls right into MCP / palm surface ~ 0.22 to 0.35 palm spans.
+        # This distance is strictly monotonic: squeezing tighter NEVER increases distance.
+        tip_mcp_dist = np.linalg.norm(v_tip - v_mcp) / palm_span
+        dist_flex = np.clip((1.05 - tip_mcp_dist) / 0.70, 0.0, 1.0)
 
-        f_raw = 0.55 * ang_flex + 0.45 * dist_flex
+        # (b) PIP joint angle
+        pip_angle = calculate_angle_3d(landmarks[mcp_idx], landmarks[pip_idx], landmarks[dip_idx])
+        pip_flex = np.clip((165.0 - pip_angle) / 95.0, 0.0, 1.0)
+
+        # (c) DIP joint angle
+        dip_angle = calculate_angle_3d(landmarks[pip_idx], landmarks[dip_idx], landmarks[tip_idx])
+        dip_flex = np.clip((160.0 - dip_angle) / 75.0, 0.0, 1.0)
+
+        f_raw = 0.50 * dist_flex + 0.35 * pip_flex + 0.15 * dip_flex
 
         if f_raw < 0.08:
             f_norm = 0.0
         else:
-            f_norm = (f_raw - 0.08) / 0.92
+            # Reaches solid 1.0 (180 deg) at f_raw >= 0.80 and STAYS at 1.0 under tightest fist squeeze
+            f_norm = np.clip((f_raw - 0.08) / 0.72, 0.0, 1.0)
 
-        flexions.append(float(np.clip(f_norm, 0.0, 1.0)))
+        flexions.append(float(f_norm))
 
     return flexions
 
@@ -152,7 +189,7 @@ def main():
     parser.add_argument("--ip", type=str, default="192.168.4.1", help="ESP32 IP address for UDP")
     parser.add_argument("--udp-port", type=int, default=8888, help="UDP telemetry port on ESP32 (default 8888)")
     parser.add_argument("--port", type=str, default=None, help="Serial COM port (e.g. COM3) or empty for auto-detect")
-    parser.add_argument("--alpha", type=float, default=0.35, help="EMA motion smoothing factor 0.05-0.95 (default 0.35)")
+    parser.add_argument("--alpha", type=float, default=0.75, help="EMA motion smoothing factor 0.05-0.95 (default 0.75)")
     parser.add_argument("--mirror", action="store_true", default=True, help="Mirror camera view")
     parser.add_argument("--wrist", action="store_true", default=False, help="Enable live wrist roll tracking on boot")
     args = parser.parse_args()
@@ -255,12 +292,24 @@ def main():
                     for i in range(5):
                         ch_key = channel_keys[i]
                         target_deg = calibration.map_flexion_to_angle(calibrated_flexions[i], profile[ch_key])
-                        smoothed_angles[i] = alpha * target_deg + (1.0 - alpha) * smoothed_angles[i]
+                        # Adaptive low-latency filter:
+                        # Quick gesture snap (delta > 8 deg): snap at dynamic alpha 0.88-0.92 for near real-time tracking
+                        # Holding static pose (delta < 2.5 deg): smooth at lower alpha to eliminate camera landmark noise
+                        delta = abs(target_deg - smoothed_angles[i])
+                        if delta > 10.0:
+                            dyn_alpha = 0.90
+                        elif delta > 4.0:
+                            dyn_alpha = 0.70
+                        else:
+                            dyn_alpha = min(alpha, 0.35)
+                        smoothed_angles[i] = dyn_alpha * target_deg + (1.0 - dyn_alpha) * smoothed_angles[i]
 
                     # Wrist roll tracking
                     if track_wrist:
                         raw_wrist_deg = compute_wrist_roll(hand_landmarks.landmark)
-                        smoothed_angles[5] = alpha * raw_wrist_deg + (1.0 - alpha) * smoothed_angles[5]
+                        w_delta = abs(raw_wrist_deg - smoothed_angles[5])
+                        w_alpha = 0.88 if w_delta > 10.0 else (0.65 if w_delta > 4.0 else 0.35)
+                        smoothed_angles[5] = w_alpha * raw_wrist_deg + (1.0 - w_alpha) * smoothed_angles[5]
                     else:
                         smoothed_angles[5] = 90.0
 
